@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Runs ./gradlew with all tool state kept inside the project (.tools/), never in ~.
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+T="$ROOT/.tools"
+mkdir -p "$T/tmp"
+export GRADLE_USER_HOME="$T/gradle-home"
+export ANDROID_USER_HOME="$T/android-home"
+export TMPDIR="$T/tmp"
+# Chaquopy's build Python (python3.13) comes from the `untitled` conda env.
+CONDA_ENV="${CONDA_ENV_DIR:-$HOME/miniconda3/envs/untitled}"
+[ -d "$CONDA_ENV/bin" ] && export PATH="$CONDA_ENV/bin:$PATH"
+# The system JDK here is runtime-only (no javac); default to Android Studio's bundled JBR.
+JBR=/var/lib/flatpak/app/com.google.AndroidStudio/x86_64/stable/active/files/extra/jbr
+[ -z "$JAVA_HOME" ] && [ -x "$JBR/bin/javac" ] && export JAVA_HOME="$JBR"
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+exec "$ROOT/gradlew" -Dorg.gradle.jvmargs="-Xmx4g -Dfile.encoding=UTF-8 -Djava.io.tmpdir=$T/tmp" "$@"

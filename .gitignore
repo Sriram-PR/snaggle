@@ -1,0 +1,11 @@
+# Project-local tool state (Gradle home, Android user home, venv, caches)
+/.tools/
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
