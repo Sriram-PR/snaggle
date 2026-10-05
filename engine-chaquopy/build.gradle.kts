@@ -12,8 +12,13 @@ android {
     buildToolsVersion = "36.1.0" // installed version; SDK auto-download is off
     defaultConfig {
         minSdk = 24
-        // Python 3.12+ on Chaquopy is 64-bit only.
-        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
+    }
+    // One flavor per ABI (Python 3.12+ on Chaquopy is 64-bit only): per-ABI APKs, and
+    // per-ABI pip requirements, since curl_cffi only has an arm64 Android wheel.
+    flavorDimensions += "abi"
+    productFlavors {
+        create("arm64") { dimension = "abi"; ndk { abiFilters += "arm64-v8a" } }
+        create("x64") { dimension = "abi"; ndk { abiFilters += "x86_64" } }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -41,6 +46,15 @@ chaquopy {
             options("--cache-dir", rootProject.file(".tools/pip-cache").path)
             install("certifi")
             install("mutagen")
+        }
+    }
+    productFlavors {
+        getByName("arm64") {
+            pip {
+                // Browser impersonation for yt-dlp (TikTok etc.). cffi built by native/cffi/build.sh.
+                install(rootProject.file("native/out/wheels/cffi-2.1.1-cp313-cp313-android_24_arm64_v8a.whl").path)
+                install("curl_cffi==0.16.3")
+            }
         }
     }
 }
