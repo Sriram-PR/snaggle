@@ -98,7 +98,8 @@ def _summary(info):
 
 def probe(url, sink=None):
     import yt_dlp
-    with yt_dlp.YoutubeDL(_params(sink)) as ydl:
+    # 'all' so probing never fails on format choice; the download picks its own format.
+    with yt_dlp.YoutubeDL(_params(sink, {'format': 'all'})) as ydl:
         info = ydl.extract_info(url, download=False)
     with _lock:
         _info_cache[url] = info

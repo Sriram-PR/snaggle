@@ -1,6 +1,7 @@
 package dev.placeholder.engine.chaquopy
 
 import android.content.Context
+import android.util.Log
 import com.chaquo.python.PyException
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
@@ -32,6 +33,8 @@ import kotlinx.coroutines.channels.Channel as KChannel
 fun interface PyEventSink {
     fun onEvent(json: String)
 }
+
+private const val TAG = "Engine"
 
 class ChaquopyEngine(context: Context) : Engine {
     private val appContext = context.applicationContext
@@ -77,7 +80,14 @@ class ChaquopyEngine(context: Context) : Engine {
 
     override suspend fun probe(url: String): MediaInfo = withContext(Dispatchers.IO) {
         try {
-            JSONObject(py().callAttr("probe", url, null).toString()).toMediaInfo()
+            val sink = PyEventSink { json ->
+                val e = JSONObject(json)
+                if (e.optString("level") != "debug") Log.i(TAG, e.optString("message"))
+            }
+            val result = JSONObject(py().callAttr("probe", url, sink).toString())
+            val formats = result.getJSONArray("formats")
+            for (i in 0 until formats.length()) Log.d(TAG, "format ${formats.getJSONObject(i)}")
+            result.toMediaInfo()
         } catch (e: PyException) {
             throw EngineException(EngineError.classify(e.message ?: ""), e)
         }

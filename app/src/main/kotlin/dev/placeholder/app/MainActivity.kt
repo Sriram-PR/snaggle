@@ -45,12 +45,13 @@ import kotlin.time.TimeSource
 /** Throwaway spike UI: exercise the engine and show a log. Not the real app. */
 class MainActivity : ComponentActivity() {
     private val sharedUrl = mutableStateOf("")
+    private val pendingAction = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleIntent(intent)
-        setContent { MaterialTheme { SpikeScreen(sharedUrl) } }
+        setContent { MaterialTheme { SpikeScreen(sharedUrl, pendingAction) } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -59,6 +60,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // Scripted runs: adb shell am start -n dev.placeholder.app/.MainActivity --es url <url> --es spike_action probe
+        intent?.getStringExtra("url")?.let { sharedUrl.value = it }
+        intent?.getStringExtra("spike_action")?.let { pendingAction.value = it }
         if (intent?.action == Intent.ACTION_SEND) {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
                 sharedUrl.value = Regex("https?://\\S+").find(text)?.value ?: text
@@ -75,12 +79,18 @@ private object Spike {
 }
 
 @Composable
-private fun SpikeScreen(sharedUrl: androidx.compose.runtime.MutableState<String>) {
+private fun SpikeScreen(
+    sharedUrl: androidx.compose.runtime.MutableState<String>,
+    pendingAction: androidx.compose.runtime.MutableState<String?>,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var url by sharedUrl
     val listState = rememberLazyListState()
-    fun log(line: String) = Spike.log.add(line)
+    fun log(line: String) {
+        Spike.log.add(line)
+        android.util.Log.i("Spike", line)
+    }
 
     LaunchedEffect(Spike.log.size) { if (Spike.log.isNotEmpty()) listState.scrollToItem(Spike.log.lastIndex) }
 
@@ -130,6 +140,18 @@ private fun SpikeScreen(sharedUrl: androidx.compose.runtime.MutableState<String>
             }
             log("■ download took ${mark.elapsedNow().inWholeMilliseconds} ms")
         }
+    }
+
+    LaunchedEffect(pendingAction.value) {
+        when (pendingAction.value) {
+            "init" -> timed("init") { engine(); log(Spike.engine?.versions().toString()) }
+            "probe" -> timed("probe") { log(engine().probe(url.trim()).toString()) }
+            "video" -> download(Mode.VIDEO_COMPAT)
+            "720" -> download(Mode.VIDEO_720)
+            "audio" -> download(Mode.AUDIO)
+            "cancel" -> { Spike.job?.cancel(); log("cancel requested") }
+        }
+        pendingAction.value = null
     }
 
     Column(Modifier.fillMaxSize().safeDrawingPadding().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
