@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.placeholder.engine.Channel
 import dev.placeholder.engine.DownloadEvent
 import dev.placeholder.engine.DownloadRequest
 import dev.placeholder.engine.EngineException
@@ -157,6 +158,10 @@ private fun SpikeScreen(
             "720" -> download(Mode.VIDEO_720)
             "audio" -> download(Mode.AUDIO)
             "cancel" -> { Spike.job?.cancel(); log("cancel requested") }
+            "update-stable" -> timed("update-stable") { log("${engine().updateYtDlp(Channel.STABLE)} installed=${engine().installedYtDlp()}") }
+            "update-nightly" -> timed("update-nightly") { log("${engine().updateYtDlp(Channel.NIGHTLY)} installed=${engine().installedYtDlp()}") }
+            "rollback" -> timed("rollback") { log("${engine().rollbackYtDlp()} installed=${engine().installedYtDlp()}") }
+            "versions" -> timed("versions") { log("${engine().versions()} installed=${engine().installedYtDlp()}") }
         }
         pendingAction.value = null
     }

@@ -18,6 +18,7 @@ import dev.placeholder.engine.EngineVersions
 import dev.placeholder.engine.Formats
 import dev.placeholder.engine.MediaInfo
 import dev.placeholder.engine.UpdateResult
+import dev.placeholder.engine.YtDlpVersion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
@@ -25,9 +26,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.Channel as KChannel
 
 /** Called from Python (bootstrap.py) with one JSON-encoded event per call. */
@@ -40,6 +44,13 @@ private const val TAG = "Engine"
 class ChaquopyEngine(context: Context) : Engine {
     private val appContext = context.applicationContext
 
+    private val store = YtDlpStore(File(appContext.filesDir, "ytdlp"), appContext.assets)
+
+    // yt-dlp can only be swapped while nothing is using it: probes/downloads count as jobs,
+    // and updateLock keeps a job from starting mid-swap.
+    private val updateLock = Mutex()
+    private val activeJobs = AtomicInteger()
+
     @Volatile private var bootstrap: PyObject? = null
     @Volatile private var versions = EngineVersions(null, null, null, null, null)
 
@@ -48,22 +59,24 @@ class ChaquopyEngine(context: Context) : Engine {
     override suspend fun init(): EngineStatus = withContext(Dispatchers.IO) {
         try {
             if (!Python.isStarted()) Python.start(AndroidPlatform(appContext))
-            val zip = installBaseline()
+            val zip = store.ensureActive().zip
             val cache = File(appContext.cacheDir, "engine").apply { mkdirs() }
             val module = Python.getInstance().getModule("bootstrap")
             val ffmpeg = installFfmpeg()
             val quickJs = findQuickJs()
-            val v = JSONObject(
-                module.callAttr("init", zip.path, cache.path, quickJs?.first?.path, ffmpeg?.first?.path).toString(),
-            )
+            versions = EngineVersions(null, null, null, quickJs = quickJs?.second, ffmpeg = ffmpeg?.second)
+            val loaded = try {
+                module.callAttr("init", zip.path, cache.path, quickJs?.first?.path, ffmpeg?.first?.path)
+            } catch (e: PyException) {
+                // A downloaded version that won't import: fall back to the previous one.
+                val broken = store.active
+                Log.w(TAG, "yt-dlp ${broken?.id} failed to load, rolling back", e)
+                store.rollback() ?: throw e
+                broken?.let(store::discard)
+                module.callAttr("load", store.active!!.zip.path)
+            }
             bootstrap = module
-            versions = EngineVersions(
-                ytDlp = v.str("yt_dlp"),
-                ejs = v.str("ejs"),
-                python = v.str("python"),
-                quickJs = quickJs?.second,
-                ffmpeg = ffmpeg?.second,
-            )
+            applyVersions(loaded)
             EngineStatus.Ready(versions)
         } catch (e: PyException) {
             EngineStatus.Failed(EngineError.Unknown(e.message ?: e.toString()))
@@ -107,20 +120,37 @@ class ChaquopyEngine(context: Context) : Engine {
         return firstLine
     }
 
-    /** Copies the APK's baseline yt-dlp to filesDir/ytdlp/stable-<version>/ once; zipimport needs a real file. */
-    private fun installBaseline(): File {
-        val version = appContext.assets.open("ytdlp/version.txt").bufferedReader().use { it.readText().trim() }
-        val target = File(appContext.filesDir, "ytdlp/stable-$version/yt-dlp.zip")
-        if (!target.exists()) {
-            target.parentFile!!.mkdirs()
-            val tmp = File(target.parentFile, "yt-dlp.zip.tmp")
-            appContext.assets.open("ytdlp/yt-dlp.zip").use { input -> tmp.outputStream().use { input.copyTo(it) } }
-            check(tmp.renameTo(target)) { "Could not install $target" }
+    private fun applyVersions(json: PyObject) {
+        val v = JSONObject(json.toString())
+        versions = versions.copy(ytDlp = v.str("yt_dlp"), ejs = v.str("ejs"), python = v.str("python"))
+    }
+
+    /** Runs [block] as a job: waits for any yt-dlp swap to finish and blocks new swaps until done. */
+    private suspend fun <T> job(block: suspend () -> T): T {
+        updateLock.withLock { activeJobs.incrementAndGet() }
+        try {
+            return block()
+        } finally {
+            activeJobs.decrementAndGet()
         }
-        return target
+    }
+
+    /** Loads [next] into Python; if it fails, reloads the current version so the engine keeps working. */
+    private fun switchTo(next: Installed) {
+        try {
+            applyVersions(py().callAttr("load", next.zip.path))
+        } catch (e: PyException) {
+            store.active?.let { applyVersions(py().callAttr("load", it.zip.path)) }
+            store.discard(next)
+            throw e
+        }
     }
 
     override suspend fun probe(url: String): MediaInfo = withContext(Dispatchers.IO) {
+        job { probeNow(url) }
+    }
+
+    private fun probeNow(url: String): MediaInfo {
         try {
             val sink = PyEventSink { json ->
                 val e = JSONObject(json)
@@ -129,7 +159,7 @@ class ChaquopyEngine(context: Context) : Engine {
             val result = JSONObject(py().callAttr("probe", url, sink).toString())
             val formats = result.getJSONArray("formats")
             for (i in 0 until formats.length()) Log.d(TAG, "format ${formats.getJSONObject(i)}")
-            result.toMediaInfo()
+            return result.toMediaInfo()
         } catch (e: PyException) {
             throw EngineException(EngineError.classify(e.message ?: ""), e)
         }
@@ -140,10 +170,12 @@ class ChaquopyEngine(context: Context) : Engine {
         val (format, merge) = Formats.forMode(req.mode)
         req.outputDir.mkdirs()
         launch(Dispatchers.IO) {
-            try {
-                py().callAttr("download", req.jobId, req.url, format, merge, req.outputDir.path, sink)
-            } catch (e: PyException) {
-                trySendBlocking(DownloadEvent.Failed(EngineError.Unknown(e.message ?: e.toString())))
+            job {
+                try {
+                    py().callAttr("download", req.jobId, req.url, format, merge, req.outputDir.path, sink)
+                } catch (e: PyException) {
+                    trySendBlocking(DownloadEvent.Failed(EngineError.Unknown(e.message ?: e.toString())))
+                }
             }
             close()
         }
@@ -155,9 +187,41 @@ class ChaquopyEngine(context: Context) : Engine {
         withContext(Dispatchers.IO) { py().callAttr("cancel", jobId) }
     }
 
-    override suspend fun updateYtDlp(channel: Channel): UpdateResult = UpdateResult.Failed("Not implemented yet (spike step 5)")
+    /** Switches to the latest [channel] release, but never to a version older than the active one. */
+    override suspend fun updateYtDlp(channel: Channel): UpdateResult = withContext(Dispatchers.IO) {
+        updateLock.withLock {
+            if (activeJobs.get() > 0) return@withLock UpdateResult.Failed("A download is running")
+            val current = store.active ?: return@withLock UpdateResult.Failed("Engine not initialised")
+            try {
+                val latest = store.latestVersion(channel)
+                if (!YtDlpVersion.isNewer(latest, current.version)) return@withLock UpdateResult.UpToDate(current.version)
+                val next = store.download(channel, latest)
+                switchTo(next)
+                store.activate(next)
+                UpdateResult.Updated(current.id, next.id)
+            } catch (e: Exception) {
+                UpdateResult.Failed(e.message ?: e.toString())
+            }
+        }
+    }
 
-    override suspend fun rollbackYtDlp(): UpdateResult = UpdateResult.Failed("Not implemented yet (spike step 5)")
+    override suspend fun rollbackYtDlp(): UpdateResult = withContext(Dispatchers.IO) {
+        updateLock.withLock {
+            if (activeJobs.get() > 0) return@withLock UpdateResult.Failed("A download is running")
+            val current = store.active ?: return@withLock UpdateResult.Failed("Engine not initialised")
+            val target = store.previous ?: return@withLock UpdateResult.Failed("Nothing to roll back to")
+            try {
+                switchTo(target)
+                store.rollback()
+                UpdateResult.Updated(current.id, target.id)
+            } catch (e: Exception) {
+                UpdateResult.Failed(e.message ?: e.toString())
+            }
+        }
+    }
+
+    /** Installed yt-dlp ids (e.g. "nightly-2026.09.27.232945"), for the engine settings screen and logs. */
+    fun installedYtDlp(): Pair<String?, String?> = store.active?.id to store.previous?.id
 
     override fun versions(): EngineVersions = versions
 

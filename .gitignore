@@ -11,3 +11,4 @@ captures/
 .cxx/
 /native/.build/
 /native/out/
+__pycache__/

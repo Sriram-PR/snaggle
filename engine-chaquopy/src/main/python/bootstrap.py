@@ -4,12 +4,14 @@ yt-dlp itself is not bundled as a Python package: it is loaded from a zipapp on
 disk so it can be updated at runtime. Events go back to Kotlin as JSON strings
 through `sink.onEvent(str)`.
 """
+import importlib
 import json
 import os
 import sys
 import tempfile
 import threading
 import traceback
+import zipimport
 
 _config = {}
 _cancelled = set()
@@ -24,10 +26,35 @@ class _Cancelled(Exception):
 def init(zip_path, cache_dir, quickjs_path=None, ffmpeg_dir=None):
     # yt-dlp's QuickJS provider writes the solver script to a temp file.
     tempfile.tempdir = cache_dir
-    if zip_path not in sys.path:
-        sys.path.insert(0, zip_path)
-    import yt_dlp  # noqa: F401
     _config.update(cache=cache_dir, quickjs=quickjs_path, ffmpeg=ffmpeg_dir)
+    return load(zip_path)
+
+
+_PACKAGES = ('yt_dlp', 'yt_dlp_ejs')
+
+
+def load(zip_path):
+    """(Re)loads yt-dlp from zip_path in-process, unloading any previously imported version.
+
+    Callers must ensure no download is running: live YoutubeDL objects keep using old modules.
+    """
+    old = _config.get('zip')
+    for name in list(sys.modules):
+        if name.split('.')[0] in _PACKAGES:
+            del sys.modules[name]
+    if old:
+        while old in sys.path:
+            sys.path.remove(old)
+        sys.path_importer_cache.pop(old, None)
+        zipimport._zip_directory_cache.pop(old, None)
+    with _lock:
+        _info_cache.clear()
+    sys.path.insert(0, zip_path)
+    importlib.invalidate_caches()
+    import yt_dlp
+    if not yt_dlp.__file__.startswith(zip_path):
+        raise ImportError(f'yt_dlp imported from {yt_dlp.__file__}, expected {zip_path}')
+    _config['zip'] = zip_path
     return json.dumps(versions())
 
 
