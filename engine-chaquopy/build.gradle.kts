@@ -12,6 +12,7 @@ android {
     buildToolsVersion = "36.1.0" // installed version; SDK auto-download is off
     defaultConfig {
         minSdk = 24
+        consumerProguardFiles("consumer-rules.pro")
     }
     // One flavor per ABI (Python 3.12+ on Chaquopy is 64-bit only): per-ABI APKs, and
     // per-ABI pip requirements, since curl_cffi only has an arm64 Android wheel.

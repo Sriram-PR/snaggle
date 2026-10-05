@@ -22,6 +22,14 @@ android {
         create("x64") { dimension = "abi"; ndk { abiFilters += "x86_64" } }
     }
 
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
+
     buildFeatures { compose = true }
 
     compileOptions {
