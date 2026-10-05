@@ -1,6 +1,7 @@
 package dev.placeholder.engine.chaquopy
 
 import android.content.Context
+import android.system.Os
 import android.util.Log
 import com.chaquo.python.PyException
 import com.chaquo.python.PyObject
@@ -50,19 +51,41 @@ class ChaquopyEngine(context: Context) : Engine {
             val zip = installBaseline()
             val cache = File(appContext.cacheDir, "engine").apply { mkdirs() }
             val module = Python.getInstance().getModule("bootstrap")
-            val v = JSONObject(module.callAttr("init", zip.path, cache.path, null, null).toString())
+            val ffmpeg = installFfmpeg()
+            val v = JSONObject(module.callAttr("init", zip.path, cache.path, null, ffmpeg?.first?.path).toString())
             bootstrap = module
             versions = EngineVersions(
                 ytDlp = v.str("yt_dlp"),
                 ejs = v.str("ejs"),
                 python = v.str("python"),
                 quickJs = null,
-                ffmpeg = null,
+                ffmpeg = ffmpeg?.second,
             )
             EngineStatus.Ready(versions)
         } catch (e: PyException) {
             EngineStatus.Failed(EngineError.Unknown(e.message ?: e.toString()))
         }
+    }
+
+    /**
+     * Android only lets apps exec files from nativeLibraryDir, where they must be named lib*.so.
+     * yt-dlp looks for `ffmpeg`/`ffprobe` in a directory, so point symlinks with those names at them.
+     * Recreated on every init because nativeLibraryDir changes when the app is updated.
+     * Returns the symlink directory and `ffmpeg -version`'s first line, or null if not bundled.
+     */
+    private fun installFfmpeg(): Pair<File, String>? {
+        val libDir = File(appContext.applicationInfo.nativeLibraryDir)
+        if (!File(libDir, "libffmpeg.so").exists()) return null
+        val binDir = File(appContext.filesDir, "bin").apply { mkdirs() }
+        for (name in listOf("ffmpeg", "ffprobe")) {
+            val link = File(binDir, name)
+            link.delete()
+            Os.symlink(File(libDir, "lib$name.so").path, link.path)
+        }
+        val process = ProcessBuilder(File(binDir, "ffmpeg").path, "-hide_banner", "-version").redirectErrorStream(true).start()
+        val firstLine = process.inputStream.bufferedReader().use { it.readLine() }.orEmpty()
+        check(process.waitFor() == 0) { "ffmpeg failed to run: $firstLine" }
+        return binDir to firstLine.removePrefix("ffmpeg version ").substringBefore(' ')
     }
 
     /** Copies the APK's baseline yt-dlp to filesDir/ytdlp/stable-<version>/ once; zipimport needs a real file. */

@@ -9,3 +9,5 @@ local.properties
 captures/
 .externalNativeBuild/
 .cxx/
+/native/.build/
+/native/out/
