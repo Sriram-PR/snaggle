@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         // Scripted runs: adb shell am start -n dev.placeholder.app/.MainActivity --es url <url> --es spike_action probe
         intent?.getStringExtra("url")?.let { sharedUrl.value = it }
+        debugParams = intent?.getStringExtra("params")
         intent?.getStringExtra("spike_action")?.let { pendingAction.value = it }
         if (intent?.action == Intent.ACTION_SEND) {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
@@ -70,6 +71,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+/** Extra yt-dlp params (JSON) from the launching intent, e.g. --es params '{"extractor_args":{...}}'. */
+private var debugParams: String? = null
 
 private object Spike {
     var engine: ChaquopyEngine? = null
@@ -110,9 +114,12 @@ private fun SpikeScreen(
     }
 
     suspend fun engine(): ChaquopyEngine =
-        Spike.engine ?: ChaquopyEngine(context).also {
+        (Spike.engine ?: ChaquopyEngine(context).also {
             log("init: ${it.init()}")
             Spike.engine = it
+        }).also { e ->
+            e.setDebugParams(debugParams)
+            debugParams?.let { log("debug params: $it") }
         }
 
     fun download(mode: Mode) {

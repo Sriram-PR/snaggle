@@ -52,13 +52,16 @@ class ChaquopyEngine(context: Context) : Engine {
             val cache = File(appContext.cacheDir, "engine").apply { mkdirs() }
             val module = Python.getInstance().getModule("bootstrap")
             val ffmpeg = installFfmpeg()
-            val v = JSONObject(module.callAttr("init", zip.path, cache.path, null, ffmpeg?.first?.path).toString())
+            val quickJs = findQuickJs()
+            val v = JSONObject(
+                module.callAttr("init", zip.path, cache.path, quickJs?.first?.path, ffmpeg?.first?.path).toString(),
+            )
             bootstrap = module
             versions = EngineVersions(
                 ytDlp = v.str("yt_dlp"),
                 ejs = v.str("ejs"),
                 python = v.str("python"),
-                quickJs = null,
+                quickJs = quickJs?.second,
                 ffmpeg = ffmpeg?.second,
             )
             EngineStatus.Ready(versions)
@@ -88,6 +91,22 @@ class ChaquopyEngine(context: Context) : Engine {
         return binDir to firstLine.removePrefix("ffmpeg version ").substringBefore(' ')
     }
 
+    /** yt-dlp accepts a direct path for the JS runtime, so no symlink is needed. Returns path and version. */
+    private fun findQuickJs(): Pair<File, String>? {
+        val qjs = File(appContext.applicationInfo.nativeLibraryDir, "libqjs.so")
+        if (!qjs.exists()) return null
+        // qjs has no --version; --help prints "QuickJS version <date>" and exits 1.
+        val firstLine = runForFirstLine(qjs.path, "--help")
+        return qjs to firstLine.substringAfter("version ").trim()
+    }
+
+    private fun runForFirstLine(vararg cmd: String): String {
+        val process = ProcessBuilder(*cmd).redirectErrorStream(true).start()
+        val firstLine = process.inputStream.bufferedReader().use { it.readLine() }.orEmpty()
+        process.waitFor()
+        return firstLine
+    }
+
     /** Copies the APK's baseline yt-dlp to filesDir/ytdlp/stable-<version>/ once; zipimport needs a real file. */
     private fun installBaseline(): File {
         val version = appContext.assets.open("ytdlp/version.txt").bufferedReader().use { it.readText().trim() }
@@ -105,7 +124,7 @@ class ChaquopyEngine(context: Context) : Engine {
         try {
             val sink = PyEventSink { json ->
                 val e = JSONObject(json)
-                if (e.optString("level") != "debug") Log.i(TAG, e.optString("message"))
+                if (e.optString("level") == "debug") Log.d(TAG, e.optString("message")) else Log.i(TAG, e.optString("message"))
             }
             val result = JSONObject(py().callAttr("probe", url, sink).toString())
             val formats = result.getJSONArray("formats")
@@ -141,6 +160,11 @@ class ChaquopyEngine(context: Context) : Engine {
     override suspend fun rollbackYtDlp(): UpdateResult = UpdateResult.Failed("Not implemented yet (spike step 5)")
 
     override fun versions(): EngineVersions = versions
+
+    /** Spike/testing only: extra yt-dlp params (JSON object) merged into every call; null clears. */
+    fun setDebugParams(json: String?) {
+        py().callAttr("set_debug_params", json)
+    }
 
     private fun parseEvent(e: JSONObject): List<DownloadEvent> = when (e.getString("type")) {
         "progress" -> {

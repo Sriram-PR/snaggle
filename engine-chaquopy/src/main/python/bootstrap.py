@@ -81,9 +81,16 @@ def _params(sink, extra=None):
         params['js_runtimes'] = {'quickjs': {'path': _config['quickjs']}}
     if _config.get('ffmpeg'):
         params['ffmpeg_location'] = _config['ffmpeg']
+    if _config.get('debug_params'):
+        params.update(_config['debug_params'])
     if extra:
         params.update(extra)
     return params
+
+
+def set_debug_params(params_json):
+    """Spike/testing only: extra yt-dlp params merged into every call (JSON object or empty)."""
+    _config['debug_params'] = json.loads(params_json) if params_json else None
 
 
 def _summary(info):

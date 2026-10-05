@@ -23,11 +23,11 @@ android {
 
 val checkNativeBinaries = tasks.register("checkNativeBinaries") {
     val required = listOf("arm64-v8a", "x86_64").flatMap { abi ->
-        listOf("libffmpeg.so", "libffprobe.so").map { rootProject.file("native/out/$abi/$it") }
+        listOf("libffmpeg.so", "libffprobe.so", "libqjs.so").map { rootProject.file("native/out/$abi/$it") }
     }
     doLast {
         val missing = required.filterNot { it.exists() }
-        check(missing.isEmpty()) { "Missing native binaries ${missing.map { it.name }.distinct()}; run native/ffmpeg/build.sh" }
+        check(missing.isEmpty()) { "Missing native binaries ${missing.map { it.name }.distinct()}; run native/ffmpeg/build.sh and native/quickjs/build.sh" }
     }
 }
 tasks.named("preBuild") { dependsOn(checkNativeBinaries) }
@@ -77,7 +77,7 @@ val fetchYtDlp = tasks.register<FetchYtDlp>("fetchYtDlp") {
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(fetchYtDlp, FetchYtDlp::outputDir)
-        // ffmpeg/ffprobe built by native/ffmpeg/build.sh, shipped as lib*.so executables.
+        // ffmpeg/ffprobe/qjs built by native/*/build.sh, shipped as lib*.so executables.
         variant.sources.jniLibs?.addStaticSourceDirectory(rootProject.file("native/out").path)
     }
 }
