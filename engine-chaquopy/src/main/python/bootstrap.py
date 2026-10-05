@@ -15,6 +15,8 @@ import zipimport
 
 _config = {}
 _cancelled = set()
+_job_threads = {}  # job_id -> thread ident running it
+_procs = {}  # thread ident -> live ffmpeg/ffprobe Popen objects
 _info_cache = {}
 _lock = threading.Lock()
 
@@ -55,7 +57,31 @@ def load(zip_path):
     if not yt_dlp.__file__.startswith(zip_path):
         raise ImportError(f'yt_dlp imported from {yt_dlp.__file__}, expected {zip_path}')
     _config['zip'] = zip_path
+    _track_ffmpeg_processes()
     return json.dumps(versions())
+
+
+def _track_ffmpeg_processes():
+    """Wraps the Popen used by yt-dlp's ffmpeg postprocessors so cancel() can kill a running merge."""
+    import yt_dlp.postprocessor.ffmpeg as ffmpeg_pp
+    base = getattr(ffmpeg_pp, 'Popen', None)
+    if base is None:  # yt-dlp refactored; cancel then only takes effect after ffmpeg exits
+        return
+
+    class TrackedPopen(base):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            with _lock:
+                _procs.setdefault(threading.get_ident(), set()).add(self)
+
+        def wait(self, *args, **kwargs):
+            try:
+                return super().wait(*args, **kwargs)
+            finally:
+                with _lock:
+                    _procs.get(threading.get_ident(), set()).discard(self)
+
+    ffmpeg_pp.Popen = TrackedPopen
 
 
 def versions():
@@ -148,6 +174,9 @@ def probe(url, sink=None):
 def cancel(job_id):
     with _lock:
         _cancelled.add(job_id)
+        procs = list(_procs.get(_job_threads.get(job_id), ()))
+    for proc in procs:
+        proc.kill()
 
 
 def download(job_id, url, fmt, merge_format, out_dir, sink):
@@ -157,11 +186,15 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
     def emit(**event):
         sink.onEvent(json.dumps(event))
 
+    # Every file this job may leave behind; deleted if the job is cancelled.
+    touched = set()
+
     def check_cancel():
         if job_id in _cancelled:
             raise _Cancelled()
 
     def progress_hook(d):
+        touched.update(filter(None, (d.get('filename'), d.get('tmpfilename'))))
         check_cancel()
         if d['status'] == 'downloading':
             emit(type='progress',
@@ -171,6 +204,8 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
                  eta=d.get('eta'))
 
     def pp_hook(d):
+        info = d.get('info_dict') or {}
+        touched.update(filter(None, (info.get('filepath'), *(info.get('__files_to_merge') or ()))))
         check_cancel()
         if d['status'] == 'started':
             emit(type='postprocessing', name=d.get('postprocessor'))
@@ -185,6 +220,8 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
     if merge_format:
         extra['merge_output_format'] = merge_format
 
+    with _lock:
+        _job_threads[job_id] = threading.get_ident()
     try:
         with yt_dlp.YoutubeDL(_params(sink, extra)) as ydl:
             with _lock:
@@ -196,9 +233,24 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         emit(type='done', path=path, info=_summary(info))
     except Exception as e:  # yt-dlp may wrap _Cancelled, so check the flag rather than the type
         if job_id in _cancelled:
+            _delete_partials(touched)
             emit(type='cancelled')
         else:
+            # Keep .part files: a retry resumes them.
             emit(type='error', message=str(e), trace=traceback.format_exc())
     finally:
         with _lock:
             _cancelled.discard(job_id)
+            _job_threads.pop(job_id, None)
+            _procs.pop(threading.get_ident(), None)
+
+
+def _delete_partials(paths):
+    for path in paths:
+        root, ext = os.path.splitext(path)
+        # .temp<ext> is where yt-dlp's ffmpeg postprocessors write before renaming.
+        for candidate in (path, path + '.part', path + '.ytdl', root + '.temp' + ext):
+            try:
+                os.remove(candidate)
+            except FileNotFoundError:
+                pass

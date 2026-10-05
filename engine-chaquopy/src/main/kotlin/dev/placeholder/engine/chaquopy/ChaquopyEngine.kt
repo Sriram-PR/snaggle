@@ -166,7 +166,12 @@ class ChaquopyEngine(context: Context) : Engine {
     }
 
     override fun download(req: DownloadRequest): Flow<DownloadEvent> = callbackFlow {
-        val sink = PyEventSink { json -> parseEvent(JSONObject(json)).forEach { trySendBlocking(it) } }
+        val sink = PyEventSink { json ->
+            val events = parseEvent(JSONObject(json))
+            events.filter { it is DownloadEvent.Cancelled || it is DownloadEvent.Done || it is DownloadEvent.Failed }
+                .forEach { Log.i(TAG, "download ${req.jobId}: $it") }
+            events.forEach { trySendBlocking(it) }
+        }
         val (format, merge) = Formats.forMode(req.mode)
         req.outputDir.mkdirs()
         launch(Dispatchers.IO) {
@@ -176,6 +181,7 @@ class ChaquopyEngine(context: Context) : Engine {
                 } catch (e: PyException) {
                     trySendBlocking(DownloadEvent.Failed(EngineError.Unknown(e.message ?: e.toString())))
                 }
+                Log.i(TAG, "download ${req.jobId} returned from Python")
             }
             close()
         }
