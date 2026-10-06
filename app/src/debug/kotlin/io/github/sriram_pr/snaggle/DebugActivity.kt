@@ -161,6 +161,12 @@ private fun SpikeScreen(
             "update-stable" -> timed("update-stable") { log("${engine().updateYtDlp(Channel.STABLE)} installed=${engine().installedYtDlp()}") }
             "update-nightly" -> timed("update-nightly") { log("${engine().updateYtDlp(Channel.NIGHTLY)} installed=${engine().installedYtDlp()}") }
             "rollback" -> timed("rollback") { log("${engine().rollbackYtDlp()} installed=${engine().installedYtDlp()}") }
+            "uri" -> timed("uri") {
+                // How MediaStore reports a URI to this app: readable, missing, or someone else's.
+                val uri = android.net.Uri.parse(url.trim())
+                log("open: " + runCatching { context.contentResolver.openFileDescriptor(uri, "r")?.use { "ok" } }.fold({ it }, { it.javaClass.name + ": " + it.message }))
+                log("query: " + runCatching { context.contentResolver.query(uri, null, null, null, null)?.use { "rows=${it.count}" } }.fold({ it }, { it.javaClass.name + ": " + it.message }))
+            }
             "versions" -> timed("versions") { log("${engine().versions()} installed=${engine().installedYtDlp()}") }
         }
         pendingAction.value = null

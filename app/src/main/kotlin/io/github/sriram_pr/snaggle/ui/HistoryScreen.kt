@@ -175,7 +175,7 @@ private fun JobRow(
     // Thumbnail from MediaStore for finished jobs; null bitmap + present=false means the file is gone.
     val thumb by produceState<Pair<Bitmap?, Boolean>?>(null, job.outputUri, job.status) {
         value = if (job.status != JobStatus.DONE || job.outputUri == null) null else withContext(Dispatchers.IO) {
-            if (!JobActions.exists(context, job)) null to false
+            if (JobActions.fileState(context, job) == JobActions.FileState.MISSING) null to false
             else runCatching { context.contentResolver.loadThumbnail(Uri.parse(job.outputUri), Size(320, 180), null) }.getOrNull() to true
         }
     }

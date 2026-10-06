@@ -28,7 +28,7 @@ object JobActions {
 
     /** A finished download of the same link and mode whose file still exists, if any. */
     suspend fun findExisting(context: Context, url: String, mode: Mode): JobEntity? =
-        context.snaggle.db.jobs().findDone(url, mode)?.takeIf { exists(context, it) }
+        context.snaggle.db.jobs().findDone(url, mode)?.takeIf { fileState(context, it) != FileState.MISSING }
 
     suspend fun retry(context: Context, job: JobEntity) {
         context.snaggle.db.jobs().requeue(job.id)
@@ -82,7 +82,7 @@ object JobActions {
         val uri = job.outputUri?.let(Uri::parse)
         // A file already removed outside the app makes MediaStore throw (SecurityException on Android 16,
         // then "Invalid Uri" for a consent request), so only touch files that still exist.
-        if (uri != null && withContext(Dispatchers.IO) { exists(context, job) }) {
+        if (uri != null && withContext(Dispatchers.IO) { fileState(context, job) } != FileState.MISSING) {
             try {
                 withContext(Dispatchers.IO) { context.contentResolver.delete(uri, null, null) }
             } catch (e: SecurityException) {
@@ -105,14 +105,23 @@ object JobActions {
         context.snaggle.db.jobs().delete(jobId)
     }
 
-    fun exists(context: Context, job: JobEntity): Boolean {
-        val uri = job.outputUri?.let(Uri::parse) ?: return false
+    enum class FileState {
+        AVAILABLE,
+        /** Still on the device but no longer Snaggle's (e.g. after a reinstall): deleting needs consent. */
+        NOT_OURS,
+        MISSING,
+    }
+
+    // MediaStore on Android 16: a removed item throws FileNotFoundException ("No item at …"),
+    // someone else's item throws SecurityException ("has no access").
+    fun fileState(context: Context, job: JobEntity): FileState {
+        val uri = job.outputUri?.let(Uri::parse) ?: return FileState.MISSING
         return try {
-            context.contentResolver.openFileDescriptor(uri, "r")?.use { true } ?: false
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { FileState.AVAILABLE } ?: FileState.MISSING
         } catch (e: FileNotFoundException) {
-            false
+            FileState.MISSING
         } catch (e: SecurityException) {
-            false
+            FileState.NOT_OURS
         }
     }
 }
