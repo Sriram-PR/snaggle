@@ -27,4 +27,19 @@
     <string name="error_js_runtime">Internal engine problem (JavaScript runtime). Please report this.</string>
     <string name="error_unsupported">This link isn\'t supported.</string>
     <string name="error_unknown">Something went wrong.</string>
+    <string name="already_downloaded">Already downloaded</string>
+    <string name="already_downloaded_body">You saved this before. Open it, or download a fresh copy?</string>
+    <string name="action_download_again">Download again</string>
+    <string name="action_retry">Retry</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_paste">Paste</string>
+    <string name="action_download">Download</string>
+    <string name="link_hint">Paste a video link</string>
+    <string name="history_empty">Share a video link to Snaggle from any app, or paste one above.</string>
+    <string name="status_queued">Waiting…</string>
+    <string name="status_cancelled">Cancelled</string>
+    <string name="status_file_missing">File was removed from the device</string>
+    <string name="status_saved_video">Video · Movies/Snaggle</string>
+    <string name="status_saved_audio">Audio · Music/Snaggle</string>
+    <string name="open_failed">No app can open this file.</string>
 </resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Exported so scripts/spike.sh can drive it over adb; debug builds only. -->
+        <activity
+            android:name=".DebugActivity"
+            android:exported="true"
+            android:label="Snaggle debug"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize" />
+    </application>
+</manifest>

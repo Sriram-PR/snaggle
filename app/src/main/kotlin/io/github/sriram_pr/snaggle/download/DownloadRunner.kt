@@ -43,6 +43,7 @@ class DownloadRunner(private val app: SnaggleApp) {
             return withContext(NonCancellable) {
                 if (userCancelled.remove(jobId)) {
                     dao.setStatus(jobId, JobStatus.CANCELLED)
+                    workDir(app, jobId).deleteRecursively()
                     Outcome.CANCELLED
                 } else {
                     // Stopped by the system (constraints, memory): leave it queued; .part files resume.
@@ -61,7 +62,7 @@ class DownloadRunner(private val app: SnaggleApp) {
         dao.setStatus(jobId, JobStatus.RUNNING)
         showProgress(Notifications.progress(app, jobId, label, null, app.getString(R.string.status_starting)))
         val engine = app.readyEngine()
-        val workDir = File(app.cacheDir, "downloads/$jobId").apply { mkdirs() }
+        val workDir = workDir(app, jobId).apply { mkdirs() }
 
         var title = label
         var lastEvent = System.currentTimeMillis()
@@ -128,6 +129,9 @@ class DownloadRunner(private val app: SnaggleApp) {
         private val slots = Semaphore(2)
         private val active = ConcurrentHashMap<String, Job>()
         private val userCancelled: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        /** Scratch directory for one job; kept after failures so a retry can resume `.part` files. */
+        fun workDir(app: SnaggleApp, jobId: String) = File(app.cacheDir, "downloads/$jobId")
 
         /** Returns true if the job was running in this process and is now being cancelled. */
         fun cancel(jobId: String): Boolean {

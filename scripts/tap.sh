@@ -1,7 +1,10 @@
 #!/usr/bin/env sh
 # Usage: scripts/tap.sh "<visible text>"  — taps the first on-screen element with that text (via uiautomator).
 adb() { "${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb" "$@"; }
+# Remove the previous dump: a failed dump (e.g. while an animation runs) would otherwise reuse it silently.
+adb shell rm -f /sdcard/ui.xml
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+adb shell test -f /sdcard/ui.xml || { echo "uiautomator dump failed (screen busy?)" >&2; exit 1; }
 adb shell cat /sdcard/ui.xml | python3 -c '
 import sys, re, xml.etree.ElementTree as ET
 want = sys.argv[1].lower()

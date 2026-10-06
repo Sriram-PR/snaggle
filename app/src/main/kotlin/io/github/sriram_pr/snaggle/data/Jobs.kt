@@ -49,6 +49,14 @@ interface JobDao {
 
     @Query("UPDATE jobs SET status = 'FAILED', error = :error, updatedAt = :now WHERE id = :id")
     suspend fun setFailed(id: String, error: String, now: Long = System.currentTimeMillis())
+
+    @Query("UPDATE jobs SET status = 'QUEUED', error = NULL, progress = NULL, updatedAt = :now WHERE id = :id")
+    suspend fun requeue(id: String, now: Long = System.currentTimeMillis())
+
+    @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
+
+    @Query("SELECT * FROM jobs WHERE url = :url AND mode = :mode AND status = 'DONE' ORDER BY createdAt DESC LIMIT 1")
+    suspend fun findDone(url: String, mode: Mode): JobEntity?
 }
 
 @Database(entities = [JobEntity::class], version = 1, exportSchema = false)

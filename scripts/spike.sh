@@ -9,9 +9,9 @@ adb logcat -c
 adb logcat -v brief -s Spike:I Engine:D python.stderr:W python.stdout:I AndroidRuntime:E > "$LOG" &
 LOGCAT=$!
 if [ -n "$URL" ]; then
-    adb shell am start --activity-single-top -n io.github.sriram_pr.snaggle/.MainActivity --es spike_action "$ACTION" --es url "'$URL'" --es params "'$PARAMS'" >/dev/null 2>&1
+    adb shell am start --activity-single-top -n io.github.sriram_pr.snaggle/.DebugActivity --es spike_action "$ACTION" --es url "'$URL'" --es params "'$PARAMS'" >/dev/null 2>&1
 else
-    adb shell am start --activity-single-top -n io.github.sriram_pr.snaggle/.MainActivity --es spike_action "$ACTION" >/dev/null 2>&1
+    adb shell am start --activity-single-top -n io.github.sriram_pr.snaggle/.DebugActivity --es spike_action "$ACTION" >/dev/null 2>&1
 fi
 # The app logs "■ <label> took N ms" when an action ends.
 end=$(( $(date +%s) + TIMEOUT ))
