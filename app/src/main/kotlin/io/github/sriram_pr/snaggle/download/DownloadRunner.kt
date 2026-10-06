@@ -131,7 +131,7 @@ class DownloadRunner(private val app: SnaggleApp) {
     /**
      * One engine download of [job]; on success the file is in MediaStore and the job is DONE.
      * [fresh] uses its own engine id and directory: after a stall the old Python call may still be
-     * unwinding, and it would delete its files and cancel a run under the same id.
+     * unwinding, still writing its files and holding a cancel flag for its id.
      */
     private suspend fun attempt(
         job: JobEntity,
@@ -154,8 +154,16 @@ class DownloadRunner(private val app: SnaggleApp) {
                     while (true) {
                         delay(10_000)
                         val now = System.currentTimeMillis()
-                        if (now - lastEvent > STALL_MS) throw StalledException()
-                        if (speed.check(now)) throw TooSlowException()
+                        val stop = when {
+                            now - lastEvent > STALL_MS -> StalledException()
+                            speed.check(now) -> TooSlowException()
+                            else -> null
+                        }
+                        if (stop != null) {
+                            // Like other failures, keep the partial files so Retry resumes them.
+                            app.readyEngine().cancel(engineId, keepFiles = true)
+                            throw stop
+                        }
                     }
                 }
                 app.readyEngine().download(DownloadRequest(engineId, job.url, job.mode, workDir)).collect { event ->

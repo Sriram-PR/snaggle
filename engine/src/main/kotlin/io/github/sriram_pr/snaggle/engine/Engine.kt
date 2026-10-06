@@ -8,7 +8,8 @@ interface Engine {
     /** Single extraction; the result is cached so a following [download] of the same URL doesn't re-extract. */
     suspend fun probe(url: String): MediaInfo
     fun download(req: DownloadRequest): Flow<DownloadEvent>
-    suspend fun cancel(jobId: String)
+    /** Stops a running download; [keepFiles] leaves partial files so a later run resumes them. */
+    suspend fun cancel(jobId: String, keepFiles: Boolean = false)
     /** Installs the latest [channel] release if it is newer than both the active and the held version. */
     suspend fun updateYtDlp(channel: Channel, waitForIdle: Boolean = false): UpdateResult
     /** Switches to an installed version; switching to an older one holds the version left behind. */

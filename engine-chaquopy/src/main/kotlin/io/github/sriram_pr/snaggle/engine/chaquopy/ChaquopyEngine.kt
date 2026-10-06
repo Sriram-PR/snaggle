@@ -195,8 +195,8 @@ class ChaquopyEngine(context: Context) : Engine {
         awaitClose { if (!finished.get()) bootstrap?.callAttr("cancel", req.jobId) }
     }.buffer(KChannel.UNLIMITED)
 
-    override suspend fun cancel(jobId: String) {
-        withContext(Dispatchers.IO) { py().callAttr("cancel", jobId) }
+    override suspend fun cancel(jobId: String, keepFiles: Boolean) {
+        withContext(Dispatchers.IO) { py().callAttr("cancel", jobId, keepFiles) }
     }
 
     override suspend fun updateYtDlp(channel: Channel, waitForIdle: Boolean): UpdateResult = withContext(Dispatchers.IO) {

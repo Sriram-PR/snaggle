@@ -16,6 +16,7 @@ import zipimport
 
 _config = {}
 _cancelled = set()
+_keep_files = set()  # cancelled jobs whose partial files stay for a later resume
 _job_threads = {}  # job_id -> thread ident running it
 _procs = {}  # thread ident -> live ffmpeg/ffprobe Popen objects
 _info_cache = {}
@@ -176,8 +177,12 @@ def probe(url, sink=None):
     return json.dumps(out)
 
 
-def cancel(job_id):
+def cancel(job_id, keep_files=False):
     with _lock:
+        if keep_files:
+            if job_id not in _job_threads:
+                return  # already finished: a flag now would cancel the next run of this job
+            _keep_files.add(job_id)
         _cancelled.add(job_id)
         procs = list(_procs.get(_job_threads.get(job_id), ()))
     for proc in procs:
@@ -260,7 +265,8 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         emit(type='done', path=path, info=_summary(info))
     except Exception as e:  # yt-dlp may wrap _Cancelled, so check the flag rather than the type
         if job_id in _cancelled:
-            _delete_partials(touched)
+            if job_id not in _keep_files:
+                _delete_partials(touched)
             emit(type='cancelled')
         elif no_space:
             emit(type='nospace', needed=no_space[0][0], free=no_space[0][1])
@@ -270,6 +276,7 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
     finally:
         with _lock:
             _cancelled.discard(job_id)
+            _keep_files.discard(job_id)
             _job_threads.pop(job_id, None)
             _procs.pop(threading.get_ident(), None)
 
