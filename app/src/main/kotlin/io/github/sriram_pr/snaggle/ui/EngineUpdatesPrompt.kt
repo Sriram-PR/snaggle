@@ -2,7 +2,7 @@ package io.github.sriram_pr.snaggle.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -39,13 +39,11 @@ fun EngineUpdatesPrompt(modifier: Modifier = Modifier) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.updates_prompt_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.updates_prompt_body), style = MaterialTheme.typography.bodyMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton({ choose(UpdateFrequency.DAILY) }, Modifier.weight(1f)) {
-                    Text(stringResource(R.string.updates_prompt_auto))
-                }
-                OutlinedButton({ choose(UpdateFrequency.MANUAL) }, Modifier.weight(1f)) {
-                    Text(stringResource(R.string.updates_prompt_manual))
-                }
+            OutlinedButton({ choose(UpdateFrequency.DAILY) }, Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.updates_prompt_auto))
+            }
+            OutlinedButton({ choose(UpdateFrequency.MANUAL) }, Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.updates_prompt_manual))
             }
         }
     }
