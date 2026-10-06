@@ -34,6 +34,8 @@ data class JobEntity(
     /** The failure looks like the site changed, so a newer yt-dlp might fix it. */
     val siteChange: Boolean = false,
     val nightly: NightlyState = NightlyState.NONE,
+    /** Versions, error and recent engine log from the last failure, for "Copy debug report". */
+    val report: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
@@ -55,13 +57,13 @@ interface JobDao {
     @Query("UPDATE jobs SET status = 'DONE', title = :title, outputUri = :uri, mimeType = :mime, progress = 1, error = NULL, updatedAt = :now WHERE id = :id")
     suspend fun setDone(id: String, title: String, uri: String, mime: String, now: Long = System.currentTimeMillis())
 
-    @Query("UPDATE jobs SET status = 'FAILED', error = :error, siteChange = :siteChange, updatedAt = :now WHERE id = :id")
-    suspend fun setFailed(id: String, error: String, siteChange: Boolean = false, now: Long = System.currentTimeMillis())
+    @Query("UPDATE jobs SET status = 'FAILED', error = :error, siteChange = :siteChange, report = :report, updatedAt = :now WHERE id = :id")
+    suspend fun setFailed(id: String, error: String, siteChange: Boolean, report: String?, now: Long = System.currentTimeMillis())
 
     @Query("UPDATE jobs SET nightly = :state WHERE id = :id")
     suspend fun setNightly(id: String, state: NightlyState)
 
-    @Query("UPDATE jobs SET status = 'QUEUED', error = NULL, progress = NULL, updatedAt = :now WHERE id = :id")
+    @Query("UPDATE jobs SET status = 'QUEUED', error = NULL, report = NULL, progress = NULL, updatedAt = :now WHERE id = :id")
     suspend fun requeue(id: String, now: Long = System.currentTimeMillis())
 
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
@@ -70,7 +72,7 @@ interface JobDao {
     suspend fun findDone(url: String, mode: Mode): JobEntity?
 }
 
-@Database(entities = [JobEntity::class], version = 2, exportSchema = false)
+@Database(entities = [JobEntity::class], version = 3, exportSchema = false)
 abstract class SnaggleDb : RoomDatabase() {
     abstract fun jobs(): JobDao
 
@@ -82,7 +84,13 @@ abstract class SnaggleDb : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jobs ADD COLUMN report TEXT")
+            }
+        }
+
         fun create(context: Context): SnaggleDb =
-            Room.databaseBuilder(context, SnaggleDb::class.java, "snaggle.db").addMigrations(MIGRATION_1_2).build()
+            Room.databaseBuilder(context, SnaggleDb::class.java, "snaggle.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
     }
 }

@@ -81,7 +81,8 @@ class DownloadRunner(private val app: SnaggleApp) {
         }
 
         val title = arrayOf(job.title ?: label)
-        var attempt = attempt(job, title, showProgress)
+        val log = ArrayDeque<String>()
+        var attempt = attempt(job, title, log, showProgress)
         if (attempt is Attempt.Failed && attempt.error.isSiteChange() && dao.get(jobId)?.nightly == NightlyState.NONE &&
             app.settings.current().nightlyRetry == NightlyRetry.AUTO
         ) {
@@ -89,30 +90,30 @@ class DownloadRunner(private val app: SnaggleApp) {
             showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_updating_engine)))
             val update = runCatching { EngineUpdates.tryNightly(app) }.getOrNull()
             // Only worth retrying if we actually moved to a newer yt-dlp.
-            if (update is UpdateResult.Updated) attempt = attempt(job, title, showProgress)
+            if (update is UpdateResult.Updated) attempt = attempt(job, title, log, showProgress)
         }
 
         return when (attempt) {
             Attempt.Done -> Outcome.DONE
             is Attempt.Failed -> {
                 val siteChange = attempt.error.isSiteChange()
-                fail(jobId, title[0], attempt.error.userMessage(app), siteChange, offerNightly = siteChange && dao.get(jobId)?.nightly == NightlyState.NONE)
+                fail(job, title[0], attempt.error.userMessage(app), log, siteChange, offerNightly = siteChange && dao.get(jobId)?.nightly == NightlyState.NONE)
                 Outcome.FAILED
             }
             Attempt.Stalled -> {
-                fail(jobId, title[0], app.getString(R.string.error_stalled), siteChange = false, offerNightly = false)
+                fail(job, title[0], app.getString(R.string.error_stalled), log, siteChange = false, offerNightly = false)
                 Outcome.FAILED
             }
         }
     }
 
-    private suspend fun fail(jobId: String, title: String, message: String, siteChange: Boolean, offerNightly: Boolean) {
-        app.db.jobs().setFailed(jobId, message, siteChange)
-        Notifications.showFailed(app, jobId, title, message, offerNightly)
+    private suspend fun fail(job: JobEntity, title: String, message: String, log: Collection<String>, siteChange: Boolean, offerNightly: Boolean) {
+        app.db.jobs().setFailed(job.id, message, siteChange, DebugReport.build(app, job, message, log))
+        Notifications.showFailed(app, job.id, title, message, offerNightly)
     }
 
     /** One engine download of [job]; on success the file is in MediaStore and the job is DONE. */
-    private suspend fun attempt(job: JobEntity, title: Array<String>, showProgress: suspend (Notification) -> Unit): Attempt {
+    private suspend fun attempt(job: JobEntity, title: Array<String>, log: ArrayDeque<String>, showProgress: suspend (Notification) -> Unit): Attempt {
         val dao = app.db.jobs()
         val jobId = job.id
         val workDir = workDir(app, jobId).apply { mkdirs() }
@@ -158,7 +159,10 @@ class DownloadRunner(private val app: SnaggleApp) {
                         } else {
                             result = Attempt.Failed(EngineError.Unknown("Download stopped unexpectedly"))
                         }
-                        is DownloadEvent.Log -> Unit
+                        is DownloadEvent.Log -> {
+                            if (log.size == DebugReport.LOG_LINES) log.removeFirst()
+                            log.addLast("${event.level}: ${event.message.take(DebugReport.LINE_CHARS)}")
+                        }
                     }
                 }
                 watchdog.cancel()

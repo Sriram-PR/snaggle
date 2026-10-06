@@ -74,4 +74,6 @@
     <string name="updates_prompt_body">Sites change often, and Snaggle\'s download engine (yt-dlp) needs updates to keep up. Snaggle can fetch them automatically from yt-dlp\'s GitHub releases. They don\'t come through the app store you installed Snaggle from, so the store hasn\'t checked them. You can change this later in Settings.</string>
     <string name="updates_prompt_auto">Update automatically</string>
     <string name="updates_prompt_manual">Only when I ask</string>
+    <string name="action_copy_report">Copy debug report</string>
+    <string name="report_copied">Debug report copied</string>
 </resources>

@@ -1,9 +1,12 @@
 package io.github.sriram_pr.snaggle.ui
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.util.Size
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -15,6 +18,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -162,6 +167,7 @@ fun HistoryScreen(onSettings: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun JobRow(
     job: JobEntity,
@@ -214,8 +220,13 @@ private fun JobRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (job.status == JobStatus.FAILED && job.siteChange && job.nightly == NightlyState.NONE) {
-                TextButton(onTryLatestEngine, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.action_try_latest_engine)) }
+            if (job.status == JobStatus.FAILED) FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (job.siteChange && job.nightly == NightlyState.NONE) {
+                    TextButton(onTryLatestEngine, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.action_try_latest_engine)) }
+                }
+                job.report?.let { report ->
+                    TextButton({ copyReport(context, report) }, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.action_copy_report)) }
+                }
             }
         }
         when (job.status) {
@@ -231,6 +242,12 @@ private fun JobRow(
             }
         }
     }
+}
+
+private fun copyReport(context: Context, report: String) {
+    context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Snaggle debug report", report))
+    // Android 13+ confirms clipboard writes itself.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) Toast.makeText(context, R.string.report_copied, Toast.LENGTH_SHORT).show()
 }
 
 @Composable
