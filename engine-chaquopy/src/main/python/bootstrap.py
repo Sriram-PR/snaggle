@@ -128,6 +128,8 @@ def _params(sink, extra=None):
         'noprogress': True,
         'cachedir': os.path.join(_config['cache'], 'yt-dlp'),
         'js_runtimes': {},
+        # A video shared from a playlist (watch?v=…&list=…) means just that video.
+        'noplaylist': True,
         'verbose': True,
     }
     if _config.get('quickjs'):
