@@ -1,4 +1,4 @@
-package dev.placeholder.engine.chaquopy
+package io.github.sriram_pr.snaggle.engine.chaquopy
 
 import android.content.Context
 import android.system.Os
@@ -7,18 +7,18 @@ import com.chaquo.python.PyException
 import com.chaquo.python.PyObject
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
-import dev.placeholder.engine.Channel
-import dev.placeholder.engine.DownloadEvent
-import dev.placeholder.engine.DownloadRequest
-import dev.placeholder.engine.Engine
-import dev.placeholder.engine.EngineError
-import dev.placeholder.engine.EngineException
-import dev.placeholder.engine.EngineStatus
-import dev.placeholder.engine.EngineVersions
-import dev.placeholder.engine.Formats
-import dev.placeholder.engine.MediaInfo
-import dev.placeholder.engine.UpdateResult
-import dev.placeholder.engine.YtDlpVersion
+import io.github.sriram_pr.snaggle.engine.Channel
+import io.github.sriram_pr.snaggle.engine.DownloadEvent
+import io.github.sriram_pr.snaggle.engine.DownloadRequest
+import io.github.sriram_pr.snaggle.engine.Engine
+import io.github.sriram_pr.snaggle.engine.EngineError
+import io.github.sriram_pr.snaggle.engine.EngineException
+import io.github.sriram_pr.snaggle.engine.EngineStatus
+import io.github.sriram_pr.snaggle.engine.EngineVersions
+import io.github.sriram_pr.snaggle.engine.Formats
+import io.github.sriram_pr.snaggle.engine.MediaInfo
+import io.github.sriram_pr.snaggle.engine.UpdateResult
+import io.github.sriram_pr.snaggle.engine.YtDlpVersion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking

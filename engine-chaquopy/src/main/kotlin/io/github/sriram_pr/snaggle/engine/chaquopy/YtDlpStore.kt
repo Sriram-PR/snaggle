@@ -1,8 +1,8 @@
-package dev.placeholder.engine.chaquopy
+package io.github.sriram_pr.snaggle.engine.chaquopy
 
 import android.content.res.AssetManager
-import dev.placeholder.engine.Channel
-import dev.placeholder.engine.YtDlpVersion
+import io.github.sriram_pr.snaggle.engine.Channel
+import io.github.sriram_pr.snaggle.engine.YtDlpVersion
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException

@@ -4,12 +4,12 @@ plugins {
 }
 
 android {
-    namespace = "dev.placeholder.app"
+    namespace = "io.github.sriram_pr.snaggle"
     compileSdk = 36
     buildToolsVersion = "36.1.0" // installed version; SDK auto-download is off
 
     defaultConfig {
-        applicationId = "dev.placeholder.app"
+        applicationId = "io.github.sriram_pr.snaggle"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

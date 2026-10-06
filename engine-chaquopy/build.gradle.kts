@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "dev.placeholder.engine.chaquopy"
+    namespace = "io.github.sriram_pr.snaggle.engine.chaquopy"
     compileSdk = 36
     buildToolsVersion = "36.1.0" // installed version; SDK auto-download is off
     defaultConfig {

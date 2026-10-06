@@ -1,4 +1,4 @@
-package dev.placeholder.engine
+package io.github.sriram_pr.snaggle.engine
 
 /** yt-dlp versions are dotted dates: stable "2026.08.19", nightly "2026.09.27.232945". */
 object YtDlpVersion : Comparator<String> {

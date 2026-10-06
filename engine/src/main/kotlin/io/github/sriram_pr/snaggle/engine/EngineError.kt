@@ -1,4 +1,4 @@
-package dev.placeholder.engine
+package io.github.sriram_pr.snaggle.engine
 
 sealed interface EngineError {
     data object BotCheck : EngineError

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "app-spike"
+rootProject.name = "snaggle"
 include(":app", ":engine", ":engine-chaquopy")

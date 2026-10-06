@@ -1,4 +1,4 @@
-package dev.placeholder.engine
+package io.github.sriram_pr.snaggle.engine
 
 import kotlinx.coroutines.flow.Flow
 import java.io.File

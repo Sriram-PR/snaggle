@@ -1,4 +1,4 @@
-package dev.placeholder.app
+package io.github.sriram_pr.snaggle
 
 import android.content.Intent
 import android.os.Bundle
@@ -32,12 +32,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.placeholder.engine.Channel
-import dev.placeholder.engine.DownloadEvent
-import dev.placeholder.engine.DownloadRequest
-import dev.placeholder.engine.EngineException
-import dev.placeholder.engine.Mode
-import dev.placeholder.engine.chaquopy.ChaquopyEngine
+import io.github.sriram_pr.snaggle.engine.Channel
+import io.github.sriram_pr.snaggle.engine.DownloadEvent
+import io.github.sriram_pr.snaggle.engine.DownloadRequest
+import io.github.sriram_pr.snaggle.engine.EngineException
+import io.github.sriram_pr.snaggle.engine.Mode
+import io.github.sriram_pr.snaggle.engine.chaquopy.ChaquopyEngine
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
@@ -61,7 +61,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        // Scripted runs: adb shell am start -n dev.placeholder.app/.MainActivity --es url <url> --es spike_action probe
+        // Scripted runs: adb shell am start -n io.github.sriram_pr.snaggle/.MainActivity --es url <url> --es spike_action probe
         intent?.getStringExtra("url")?.let { sharedUrl.value = it }
         debugParams = intent?.getStringExtra("params")
         intent?.getStringExtra("spike_action")?.let { pendingAction.value = it }

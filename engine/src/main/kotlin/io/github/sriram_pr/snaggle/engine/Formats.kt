@@ -1,4 +1,4 @@
-package dev.placeholder.engine
+package io.github.sriram_pr.snaggle.engine
 
 /** yt-dlp format selectors that avoid transcoding: H.264 + AAC only, so ffmpeg just remuxes. */
 object Formats {
