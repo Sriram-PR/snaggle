@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,10 +48,16 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
     var dataSaver by remember { mutableStateOf(false) }
     var existing by remember { mutableStateOf<Pair<Mode, JobEntity>?>(null) }
     var pendingMode by remember { mutableStateOf<Mode?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    // Slide the sheet down first, then dismiss, instead of the window vanishing mid-sheet.
+    fun close() = scope.launch {
+        sheetState.hide()
+        onDismiss()
+    }
     fun startNow(mode: Mode) = scope.launch {
         JobActions.start(context, url, mode)
-        onDismiss()
+        close()
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         // Downloads run either way; without the permission they only show in Task Manager.
@@ -71,7 +78,7 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
         if (found != null) existing = mode to found else begin(mode)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -94,7 +101,7 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
                 Text(found.second.title ?: url, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(R.string.already_downloaded_body), style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton({ JobActions.open(context, found.second); onDismiss() }, Modifier.weight(1f)) {
+                    OutlinedButton({ JobActions.open(context, found.second); close() }, Modifier.weight(1f)) {
                         Text(stringResource(R.string.action_open))
                     }
                     Button({ begin(found.first) }, Modifier.weight(1f)) { Text(stringResource(R.string.action_download_again)) }
