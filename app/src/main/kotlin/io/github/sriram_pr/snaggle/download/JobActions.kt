@@ -9,6 +9,7 @@ import android.os.Build
 import android.provider.MediaStore
 import io.github.sriram_pr.snaggle.data.JobEntity
 import io.github.sriram_pr.snaggle.data.JobStatus
+import io.github.sriram_pr.snaggle.data.NightlyState
 import io.github.sriram_pr.snaggle.engine.Mode
 import io.github.sriram_pr.snaggle.snaggle
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,15 @@ object JobActions {
     suspend fun retry(context: Context, job: JobEntity) {
         context.snaggle.db.jobs().requeue(job.id)
         DownloadScheduler.enqueue(context, job.id)
+    }
+
+    /** "Try latest engine": the next run of this job installs the newest nightly yt-dlp first. */
+    suspend fun tryLatestEngine(context: Context, jobId: String) {
+        val dao = context.snaggle.db.jobs()
+        dao.setNightly(jobId, NightlyState.REQUESTED)
+        dao.requeue(jobId)
+        Notifications.dismissResult(context, jobId)
+        DownloadScheduler.enqueue(context, jobId)
     }
 
     suspend fun cancel(context: Context, jobId: String) {

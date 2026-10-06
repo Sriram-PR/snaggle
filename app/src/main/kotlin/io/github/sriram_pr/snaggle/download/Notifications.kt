@@ -17,6 +17,8 @@ import io.github.sriram_pr.snaggle.R
 object Notifications {
     private const val CHANNEL_PROGRESS = "progress"
     private const val CHANNEL_RESULTS = "results"
+    private const val CHANNEL_ENGINE = "engine"
+    private const val ENGINE_UPDATED_ID = 1
 
     fun createChannels(context: Context) {
         val nm = context.getSystemService(NotificationManager::class.java)
@@ -25,6 +27,9 @@ object Notifications {
         )
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_RESULTS, context.getString(R.string.channel_results), NotificationManager.IMPORTANCE_DEFAULT),
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ENGINE, context.getString(R.string.channel_engine), NotificationManager.IMPORTANCE_LOW),
         )
     }
 
@@ -68,14 +73,28 @@ object Notifications {
         )
     }
 
-    fun showFailed(context: Context, jobId: String, title: String, message: String) {
+    fun showFailed(context: Context, jobId: String, title: String, message: String, offerLatestEngine: Boolean) {
+        val builder = NotificationCompat.Builder(context, CHANNEL_RESULTS)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle(context.getString(R.string.status_failed))
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$message"))
+            .setAutoCancel(true)
+        if (offerLatestEngine) {
+            builder.addAction(0, context.getString(R.string.action_try_latest_engine), TryNightlyReceiver.pendingIntent(context, jobId))
+        }
+        post(context, resultId(jobId), builder.build())
+    }
+
+    fun dismissResult(context: Context, jobId: String) = NotificationManagerCompat.from(context).cancel(resultId(jobId))
+
+    fun showEngineUpdated(context: Context, version: String) {
         post(
-            context, resultId(jobId),
-            NotificationCompat.Builder(context, CHANNEL_RESULTS)
-                .setSmallIcon(android.R.drawable.stat_notify_error)
-                .setContentTitle(context.getString(R.string.status_failed))
-                .setContentText(message)
-                .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$message"))
+            context, ENGINE_UPDATED_ID,
+            NotificationCompat.Builder(context, CHANNEL_ENGINE)
+                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setContentTitle(context.getString(R.string.engine_updated))
+                .setContentText(context.getString(R.string.engine_updated_body, version))
                 .setAutoCancel(true)
                 .build(),
         )

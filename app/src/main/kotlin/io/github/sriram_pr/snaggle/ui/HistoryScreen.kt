@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -62,6 +64,7 @@ import io.github.sriram_pr.snaggle.Links
 import io.github.sriram_pr.snaggle.R
 import io.github.sriram_pr.snaggle.data.JobEntity
 import io.github.sriram_pr.snaggle.data.JobStatus
+import io.github.sriram_pr.snaggle.data.NightlyState
 import io.github.sriram_pr.snaggle.download.JobActions
 import io.github.sriram_pr.snaggle.engine.Mode
 import io.github.sriram_pr.snaggle.snaggle
@@ -71,7 +74,7 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen() {
+fun HistoryScreen(onSettings: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val jobs by remember { context.snaggle.db.jobs().observeAll() }.collectAsStateWithLifecycle(emptyList())
@@ -98,7 +101,14 @@ fun HistoryScreen() {
         if (url == null) Toast.makeText(context, R.string.share_no_link, Toast.LENGTH_SHORT).show() else sheetUrl = url
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.app_name)) },
+                actions = { IconButton(onSettings) { Icon(Icons.Default.Settings, stringResource(R.string.settings)) } },
+            )
+        },
+    ) { padding ->
         LazyColumn(contentPadding = padding) {
             item {
                 Row(
@@ -137,6 +147,7 @@ fun HistoryScreen() {
                     onShare = { JobActions.share(context, job) },
                     onCancel = { scope.launch { JobActions.cancel(context, job.id) } },
                     onRetry = { scope.launch { JobActions.retry(context, job) } },
+                    onTryLatestEngine = { scope.launch { JobActions.tryLatestEngine(context, job.id) } },
                     onDelete = { delete(job) },
                 )
             }
@@ -157,6 +168,7 @@ private fun JobRow(
     onShare: () -> Unit,
     onCancel: () -> Unit,
     onRetry: () -> Unit,
+    onTryLatestEngine: () -> Unit,
     onDelete: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -200,6 +212,9 @@ private fun JobRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (job.status == JobStatus.FAILED && job.siteChange && job.nightly == NightlyState.NONE) {
+                TextButton(onTryLatestEngine, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.action_try_latest_engine)) }
             }
         }
         when (job.status) {

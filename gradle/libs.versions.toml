@@ -9,6 +9,7 @@ lifecycle = "2.11.0"
 coreKtx = "1.19.1"
 room = "2.8.5"
 work = "2.12.0"
+datastore = "1.2.1"
 ksp = "2.3.12"
 
 [libraries]
@@ -24,6 +25,7 @@ compose-icons = { module = "androidx.compose.material:material-icons-core" }
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
+datastore = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 

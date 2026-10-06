@@ -9,10 +9,18 @@ interface Engine {
     suspend fun probe(url: String): MediaInfo
     fun download(req: DownloadRequest): Flow<DownloadEvent>
     suspend fun cancel(jobId: String)
-    suspend fun updateYtDlp(channel: Channel): UpdateResult
+    /** Installs the latest [channel] release if it is newer than both the active and the held version. */
+    suspend fun updateYtDlp(channel: Channel, waitForIdle: Boolean = false): UpdateResult
+    /** Switches to an installed version; switching to an older one holds the version left behind. */
+    suspend fun useYtDlp(id: String, waitForIdle: Boolean = false): UpdateResult
+    /** [useYtDlp] with the most recently used older version. */
     suspend fun rollbackYtDlp(): UpdateResult
+    /** Active version first, then older installed versions (most recently used first). */
+    fun installedYtDlp(): List<YtDlpInstall>
     fun versions(): EngineVersions
 }
+
+data class YtDlpInstall(val id: String, val channel: Channel, val version: String, val active: Boolean, val held: Boolean)
 
 enum class Mode { VIDEO_COMPAT, VIDEO_720, AUDIO }
 
@@ -44,6 +52,8 @@ data class EngineVersions(
 sealed interface UpdateResult {
     data class Updated(val from: String, val to: String) : UpdateResult
     data class UpToDate(val version: String) : UpdateResult
+    /** A probe or download is running and the caller didn't ask to wait for it. */
+    data object Busy : UpdateResult
     data class Failed(val reason: String) : UpdateResult
 }
 

@@ -12,6 +12,7 @@ class EngineErrorTest {
     @Test fun privateVideo() = assertClass(EngineError.LoginRequired, "ERROR: [youtube] abc: Private video. Sign in if you've been granted access")
     @Test fun instagram() = assertClass(EngineError.LoginRequired, "ERROR: [Instagram] xyz: Requested content is not available, rate-limit reached or login required.")
     @Test fun unavailable() = assertClass(EngineError.Unavailable, "ERROR: [youtube] abc: Video unavailable")
+    @Test fun unavailableVariant() = assertClass(EngineError.Unavailable, "ERROR: [youtube] aaaaaaaaaaa: This video is unavailable")
     @Test fun forbidden() = assertClass(EngineError.Forbidden, "ERROR: unable to download video data: HTTP Error 403: Forbidden")
     @Test fun rateLimited() = assertClass(EngineError.RateLimited, "ERROR: HTTP Error 429: Too Many Requests")
     @Test fun unsupported() = assertClass(EngineError.Unsupported, "ERROR: Unsupported URL: https://example.com/")

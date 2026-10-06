@@ -3,9 +3,14 @@ package io.github.sriram_pr.snaggle.download
 import android.app.Notification
 import io.github.sriram_pr.snaggle.R
 import io.github.sriram_pr.snaggle.SnaggleApp
+import io.github.sriram_pr.snaggle.data.JobEntity
 import io.github.sriram_pr.snaggle.data.JobStatus
+import io.github.sriram_pr.snaggle.data.NightlyRetry
+import io.github.sriram_pr.snaggle.data.NightlyState
 import io.github.sriram_pr.snaggle.engine.DownloadEvent
 import io.github.sriram_pr.snaggle.engine.DownloadRequest
+import io.github.sriram_pr.snaggle.engine.EngineError
+import io.github.sriram_pr.snaggle.engine.UpdateResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -56,18 +61,64 @@ class DownloadRunner(private val app: SnaggleApp) {
         }
     }
 
+    private sealed interface Attempt {
+        data object Done : Attempt
+        data class Failed(val error: EngineError) : Attempt
+        data object Stalled : Attempt
+    }
+
     private suspend fun execute(jobId: String, label: String, showProgress: suspend (Notification) -> Unit): Outcome {
         val dao = app.db.jobs()
         val job = dao.get(jobId)!!
         dao.setStatus(jobId, JobStatus.RUNNING)
         showProgress(Notifications.progress(app, jobId, label, null, app.getString(R.string.status_starting)))
-        val engine = app.readyEngine()
-        val workDir = workDir(app, jobId).apply { mkdirs() }
+        // An update check never blocks the download: network trouble here is ignored.
+        runCatching { EngineUpdates.checkIfDue(app) }
+        if (job.nightly == NightlyState.REQUESTED) {
+            dao.setNightly(jobId, NightlyState.TRIED)
+            showProgress(Notifications.progress(app, jobId, label, null, app.getString(R.string.status_updating_engine)))
+            runCatching { EngineUpdates.tryNightly(app) }
+        }
 
-        var title = label
+        val title = arrayOf(job.title ?: label)
+        var attempt = attempt(job, title, showProgress)
+        if (attempt is Attempt.Failed && attempt.error.isSiteChange() && dao.get(jobId)?.nightly == NightlyState.NONE &&
+            app.settings.current().nightlyRetry == NightlyRetry.AUTO
+        ) {
+            dao.setNightly(jobId, NightlyState.TRIED)
+            showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_updating_engine)))
+            val update = runCatching { EngineUpdates.tryNightly(app) }.getOrNull()
+            // Only worth retrying if we actually moved to a newer yt-dlp.
+            if (update is UpdateResult.Updated) attempt = attempt(job, title, showProgress)
+        }
+
+        return when (attempt) {
+            Attempt.Done -> Outcome.DONE
+            is Attempt.Failed -> {
+                val siteChange = attempt.error.isSiteChange()
+                fail(jobId, title[0], attempt.error.userMessage(app), siteChange, offerNightly = siteChange && dao.get(jobId)?.nightly == NightlyState.NONE)
+                Outcome.FAILED
+            }
+            Attempt.Stalled -> {
+                fail(jobId, title[0], app.getString(R.string.error_stalled), siteChange = false, offerNightly = false)
+                Outcome.FAILED
+            }
+        }
+    }
+
+    private suspend fun fail(jobId: String, title: String, message: String, siteChange: Boolean, offerNightly: Boolean) {
+        app.db.jobs().setFailed(jobId, message, siteChange)
+        Notifications.showFailed(app, jobId, title, message, offerNightly)
+    }
+
+    /** One engine download of [job]; on success the file is in MediaStore and the job is DONE. */
+    private suspend fun attempt(job: JobEntity, title: Array<String>, showProgress: suspend (Notification) -> Unit): Attempt {
+        val dao = app.db.jobs()
+        val jobId = job.id
+        val workDir = workDir(app, jobId).apply { mkdirs() }
         var lastEvent = System.currentTimeMillis()
         var lastUi = 0L
-        var outcome = Outcome.FAILED
+        var result: Attempt = Attempt.Failed(EngineError.Unknown("Engine finished without a result"))
         try {
             coroutineScope {
                 val watchdog = launch {
@@ -76,49 +127,46 @@ class DownloadRunner(private val app: SnaggleApp) {
                         if (System.currentTimeMillis() - lastEvent > STALL_MS) throw StalledException()
                     }
                 }
-                engine.download(DownloadRequest(jobId, job.url, job.mode, workDir)).collect { event ->
+                app.readyEngine().download(DownloadRequest(jobId, job.url, job.mode, workDir)).collect { event ->
                     lastEvent = System.currentTimeMillis()
                     when (event) {
                         is DownloadEvent.Started -> {
-                            title = event.info.title.ifBlank { label }
-                            dao.setProgress(jobId, null, title)
-                            showProgress(Notifications.progress(app, jobId, title, null, app.getString(R.string.status_starting)))
+                            title[0] = event.info.title.ifBlank { title[0] }
+                            dao.setProgress(jobId, null, title[0])
+                            showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_starting)))
                         }
                         is DownloadEvent.Progress -> if (lastEvent - lastUi > UI_INTERVAL_MS) {
                             lastUi = lastEvent
                             dao.setProgress(jobId, event.fraction, null)
                             val pct = event.fraction?.let { "${(it * 100).toInt()}%" } ?: app.getString(R.string.status_starting)
-                            showProgress(Notifications.progress(app, jobId, title, event.fraction, pct))
+                            showProgress(Notifications.progress(app, jobId, title[0], event.fraction, pct))
                         }
                         DownloadEvent.PostProcessing ->
-                            showProgress(Notifications.progress(app, jobId, title, null, app.getString(R.string.status_finishing)))
+                            showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_finishing)))
                         is DownloadEvent.Done -> {
-                            title = event.info.title.ifBlank { label }
+                            title[0] = event.info.title.ifBlank { title[0] }
                             val saved = MediaStoreSaver.save(app, event.file)
-                            dao.setDone(jobId, title, saved.uri.toString(), saved.mimeType)
+                            dao.setDone(jobId, title[0], saved.uri.toString(), saved.mimeType)
                             workDir.deleteRecursively()
-                            Notifications.showSaved(app, jobId, title, saved.uri, saved.mimeType)
-                            outcome = Outcome.DONE
+                            Notifications.showSaved(app, jobId, title[0], saved.uri, saved.mimeType)
+                            result = Attempt.Done
                         }
-                        is DownloadEvent.Failed -> {
-                            val message = event.error.userMessage(app)
-                            dao.setFailed(jobId, message)
-                            Notifications.showFailed(app, jobId, title, message)
-                            outcome = Outcome.FAILED
+                        is DownloadEvent.Failed -> result = Attempt.Failed(event.error)
+                        // Only a user cancel unwinds as cancellation; anything else is an engine failure.
+                        DownloadEvent.Cancelled -> if (jobId in userCancelled) {
+                            throw CancellationException("Cancelled in engine")
+                        } else {
+                            result = Attempt.Failed(EngineError.Unknown("Download stopped unexpectedly"))
                         }
-                        DownloadEvent.Cancelled -> throw CancellationException("Cancelled in engine")
                         is DownloadEvent.Log -> Unit
                     }
                 }
                 watchdog.cancel()
             }
         } catch (e: StalledException) {
-            val message = app.getString(R.string.error_stalled)
-            dao.setFailed(jobId, message)
-            Notifications.showFailed(app, jobId, title, message)
-            outcome = Outcome.FAILED
+            result = Attempt.Stalled
         }
-        return outcome
+        return result
     }
 
     companion object {

@@ -18,8 +18,10 @@ import io.github.sriram_pr.snaggle.engine.EngineVersions
 import io.github.sriram_pr.snaggle.engine.Formats
 import io.github.sriram_pr.snaggle.engine.MediaInfo
 import io.github.sriram_pr.snaggle.engine.UpdateResult
+import io.github.sriram_pr.snaggle.engine.YtDlpInstall
 import io.github.sriram_pr.snaggle.engine.YtDlpVersion
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +33,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.channels.Channel as KChannel
 
@@ -174,6 +177,7 @@ class ChaquopyEngine(context: Context) : Engine {
         }
         val (format, merge) = Formats.forMode(req.mode)
         req.outputDir.mkdirs()
+        val finished = AtomicBoolean(false)
         launch(Dispatchers.IO) {
             job {
                 try {
@@ -182,28 +186,31 @@ class ChaquopyEngine(context: Context) : Engine {
                     trySendBlocking(DownloadEvent.Failed(EngineError.Unknown(e.message ?: e.toString())))
                 }
                 Log.i(TAG, "download ${req.jobId} returned from Python")
+                finished.set(true)
             }
             close()
         }
-        // Collector gone (e.g. job cancelled from the UI): make Python stop at its next hook call.
-        awaitClose { bootstrap?.callAttr("cancel", req.jobId) }
+        // Collector gone mid-download (e.g. cancelled from the UI): make Python stop at its next hook.
+        // Not after a normal finish: the flag would stick and instantly cancel a retry of the same job.
+        awaitClose { if (!finished.get()) bootstrap?.callAttr("cancel", req.jobId) }
     }.buffer(KChannel.UNLIMITED)
 
     override suspend fun cancel(jobId: String) {
         withContext(Dispatchers.IO) { py().callAttr("cancel", jobId) }
     }
 
-    /** Switches to the latest [channel] release, but never to a version older than the active one. */
-    override suspend fun updateYtDlp(channel: Channel): UpdateResult = withContext(Dispatchers.IO) {
+    override suspend fun updateYtDlp(channel: Channel, waitForIdle: Boolean): UpdateResult = withContext(Dispatchers.IO) {
         updateLock.withLock {
-            if (activeJobs.get() > 0) return@withLock UpdateResult.Failed("A download is running")
+            if (!awaitIdle(waitForIdle)) return@withLock UpdateResult.Busy
             val current = store.active ?: return@withLock UpdateResult.Failed("Engine not initialised")
             try {
                 val latest = store.latestVersion(channel)
-                if (!YtDlpVersion.isNewer(latest, current.version)) return@withLock UpdateResult.UpToDate(current.version)
+                val floor = listOfNotNull(current.version, store.held).maxWith(YtDlpVersion)
+                if (!YtDlpVersion.isNewer(latest, floor)) return@withLock UpdateResult.UpToDate(current.version)
                 val next = store.download(channel, latest)
                 switchTo(next)
                 store.activate(next)
+                store.hold(null) // something newer than the held version has arrived
                 UpdateResult.Updated(current.id, next.id)
             } catch (e: Exception) {
                 UpdateResult.Failed(e.message ?: e.toString())
@@ -211,14 +218,23 @@ class ChaquopyEngine(context: Context) : Engine {
         }
     }
 
-    override suspend fun rollbackYtDlp(): UpdateResult = withContext(Dispatchers.IO) {
+    override suspend fun useYtDlp(id: String, waitForIdle: Boolean): UpdateResult = withContext(Dispatchers.IO) {
         updateLock.withLock {
-            if (activeJobs.get() > 0) return@withLock UpdateResult.Failed("A download is running")
+            if (!awaitIdle(waitForIdle)) return@withLock UpdateResult.Busy
             val current = store.active ?: return@withLock UpdateResult.Failed("Engine not initialised")
-            val target = store.previous ?: return@withLock UpdateResult.Failed("Nothing to roll back to")
+            if (current.id == id) return@withLock UpdateResult.UpToDate(current.version)
+            val target = store.older.firstOrNull { it.id == id } ?: return@withLock UpdateResult.Failed("$id is not installed")
             try {
                 switchTo(target)
-                store.rollback()
+                store.use(id)
+                val newest = (store.older + target).maxWith { a, b -> YtDlpVersion.compare(a.version, b.version) }
+                when {
+                    // Back on the newest installed version: nothing to hold.
+                    target.id == newest.id -> store.hold(null)
+                    // Rolled back: don't let the daily check reinstall the version just left.
+                    YtDlpVersion.isNewer(current.version, target.version) ->
+                        store.hold(listOfNotNull(current.version, store.held).maxWith(YtDlpVersion))
+                }
                 UpdateResult.Updated(current.id, target.id)
             } catch (e: Exception) {
                 UpdateResult.Failed(e.message ?: e.toString())
@@ -226,8 +242,27 @@ class ChaquopyEngine(context: Context) : Engine {
         }
     }
 
-    /** Installed yt-dlp ids (e.g. "nightly-2026.09.27.232945"), for the engine settings screen and logs. */
-    fun installedYtDlp(): Pair<String?, String?> = store.active?.id to store.previous?.id
+    /**
+     * Called with [updateLock] held, so no new probe/download can start; running ones only finish.
+     * Returns false if jobs are running and the caller doesn't want to wait.
+     */
+    private suspend fun awaitIdle(wait: Boolean): Boolean {
+        while (activeJobs.get() > 0) {
+            if (!wait) return false
+            delay(500)
+        }
+        return true
+    }
+
+    override suspend fun rollbackYtDlp(): UpdateResult {
+        val previous = store.previous ?: return UpdateResult.Failed("Nothing to roll back to")
+        return useYtDlp(previous.id)
+    }
+
+    override fun installedYtDlp(): List<YtDlpInstall> =
+        (listOfNotNull(store.active) + store.older).map {
+            YtDlpInstall(it.id, it.channel, it.version, active = it.id == store.active?.id, held = it.version == store.held)
+        }
 
     override fun versions(): EngineVersions = versions
 

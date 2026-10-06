@@ -57,4 +57,5 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     implementation(libs.work.runtime)
+    implementation(libs.datastore)
 }

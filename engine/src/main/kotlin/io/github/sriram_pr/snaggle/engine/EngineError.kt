@@ -19,7 +19,7 @@ sealed interface EngineError {
             "no supported javascript runtime" to JsRuntimeMissing,
             "requested format is not available" to FormatUnavailable,
             "login required|rate-limit reached|private video|members-only|sign in to" to LoginRequired,
-            "video unavailable|this video is not available|is not available in your country" to Unavailable,
+            "video unavailable|this video is (not available|unavailable)|is not available in your country" to Unavailable,
             "http error 403" to Forbidden,
             "http error 429|too many requests" to RateLimited,
             "unsupported url" to Unsupported,
