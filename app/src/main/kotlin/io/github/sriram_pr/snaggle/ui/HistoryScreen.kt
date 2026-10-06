@@ -60,7 +60,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.sriram_pr.snaggle.Links
+import io.github.sriram_pr.snaggle.engine.Links
 import io.github.sriram_pr.snaggle.R
 import io.github.sriram_pr.snaggle.data.JobEntity
 import io.github.sriram_pr.snaggle.data.JobStatus

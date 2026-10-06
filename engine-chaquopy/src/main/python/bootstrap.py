@@ -130,6 +130,8 @@ def _params(sink, extra=None):
         'js_runtimes': {},
         # A video shared from a playlist (watch?v=…&list=…) means just that video.
         'noplaylist': True,
+        # Links that are always several videos (playlist pages, multi-video posts): first one only.
+        'playlist_items': '1',
         'verbose': True,
     }
     if _config.get('quickjs'):
@@ -235,6 +237,8 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
                 cached = _info_cache.pop(url, None)
             # Reuse the probe's extraction instead of hitting the site twice.
             info = ydl.process_ie_result(cached, download=True) if cached else ydl.extract_info(url, download=True)
+        while info.get('_type') == 'playlist' and info.get('entries'):
+            info = info['entries'][0]
         downloads = info.get('requested_downloads') or []
         path = downloads[-1].get('filepath') if downloads else None
         emit(type='done', path=path, info=_summary(info))
