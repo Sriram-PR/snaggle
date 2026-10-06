@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Snaggle</string>
+    <string name="channel_progress">Downloads in progress</string>
+    <string name="channel_results">Finished downloads</string>
+    <string name="status_starting">Starting…</string>
+    <string name="status_waiting">Waiting for another download to finish…</string>
+    <string name="status_finishing">Finishing up…</string>
+    <string name="status_saved">Saved</string>
+    <string name="status_failed">Download failed</string>
+    <string name="action_open">Open</string>
+    <string name="action_share">Share</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="share_video">Video</string>
+    <string name="share_audio">Audio</string>
+    <string name="share_quality_compatible">Best compatible</string>
+    <string name="share_quality_720">Data saver (720p)</string>
+    <string name="share_no_link">No link found in what was shared.</string>
+    <string name="error_bot_check">YouTube is asking for verification. Try again later.</string>
+    <string name="error_login_required">This needs a login (private, members-only, or login-walled). Login support is coming.</string>
+    <string name="error_unavailable">The video is unavailable: removed, region-locked, or blocked.</string>
+    <string name="error_format_unavailable">That quality isn\'t available for this video. Try Data saver or Audio.</string>
+    <string name="error_forbidden">The site refused the download. Try again in a bit.</string>
+    <string name="error_rate_limited">Too many requests. Wait a few minutes and try again.</string>
+    <string name="error_network">Connection problem. Check your internet and retry.</string>
+    <string name="error_stalled">The download stopped making progress. Check your connection and retry.</string>
+    <string name="error_js_runtime">Internal engine problem (JavaScript runtime). Please report this.</string>
+    <string name="error_unsupported">This link isn\'t supported.</string>
+    <string name="error_unknown">Something went wrong.</string>
+</resources>

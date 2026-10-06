@@ -115,8 +115,8 @@ private fun SpikeScreen(
     }
 
     suspend fun engine(): ChaquopyEngine =
-        (Spike.engine ?: ChaquopyEngine(context).also {
-            log("init: ${it.init()}")
+        (Spike.engine ?: context.snaggle.readyEngine().also {
+            log("init: Ready(versions=${it.versions()})")
             Spike.engine = it
         }).also { e ->
             e.setDebugParams(debugParams)
