@@ -78,6 +78,11 @@ class DownloadRunner(private val app: SnaggleApp) {
                 engine.download(DownloadRequest(jobId, job.url, job.mode, workDir)).collect { event ->
                     lastEvent = System.currentTimeMillis()
                     when (event) {
+                        is DownloadEvent.Started -> {
+                            title = event.info.title.ifBlank { label }
+                            dao.setProgress(jobId, null, title)
+                            showProgress(Notifications.progress(app, jobId, title, null, app.getString(R.string.status_starting)))
+                        }
                         is DownloadEvent.Progress -> if (lastEvent - lastUi > UI_INTERVAL_MS) {
                             lastUi = lastEvent
                             dao.setProgress(jobId, event.fraction, null)

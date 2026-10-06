@@ -193,9 +193,14 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         if job_id in _cancelled:
             raise _Cancelled()
 
+    announced = []
+
     def progress_hook(d):
         touched.update(filter(None, (d.get('filename'), d.get('tmpfilename'))))
         check_cancel()
+        if not announced and d.get('info_dict'):
+            announced.append(True)
+            emit(type='started', info=_summary(d['info_dict']))
         if d['status'] == 'downloading':
             emit(type='progress',
                  bytes=d.get('downloaded_bytes') or 0,

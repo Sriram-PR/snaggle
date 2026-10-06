@@ -48,6 +48,8 @@ sealed interface UpdateResult {
 }
 
 sealed interface DownloadEvent {
+    /** Extraction finished and the transfer began; carries the title for notifications. */
+    data class Started(val info: MediaInfo) : DownloadEvent
     data class Progress(val fraction: Float?, val bytes: Long, val total: Long?, val speed: Long?, val eta: Long?) : DownloadEvent
     data object PostProcessing : DownloadEvent
     data class Log(val level: String, val message: String) : DownloadEvent

@@ -250,6 +250,7 @@ class ChaquopyEngine(context: Context) : Engine {
                 ),
             )
         }
+        "started" -> listOf(DownloadEvent.Started(e.getJSONObject("info").toMediaInfo()))
         "postprocessing" -> listOf(DownloadEvent.PostProcessing)
         "log" -> listOf(DownloadEvent.Log(e.getString("level"), e.getString("message")))
         "done" -> listOf(
