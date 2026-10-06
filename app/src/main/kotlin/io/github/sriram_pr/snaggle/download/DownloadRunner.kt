@@ -10,6 +10,7 @@ import io.github.sriram_pr.snaggle.data.NightlyState
 import io.github.sriram_pr.snaggle.engine.DownloadEvent
 import io.github.sriram_pr.snaggle.engine.DownloadRequest
 import io.github.sriram_pr.snaggle.engine.EngineError
+import io.github.sriram_pr.snaggle.engine.SlowDownloadDetector
 import io.github.sriram_pr.snaggle.engine.UpdateResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -33,6 +34,7 @@ class DownloadRunner(private val app: SnaggleApp) {
     enum class Outcome { DONE, FAILED, CANCELLED, RESCHEDULE }
 
     private class StalledException : Exception()
+    private class TooSlowException : Exception()
 
     suspend fun run(jobId: String, showProgress: suspend (Notification) -> Unit): Outcome {
         val dao = app.db.jobs()
@@ -65,7 +67,12 @@ class DownloadRunner(private val app: SnaggleApp) {
         data object Done : Attempt
         data class Failed(val error: EngineError) : Attempt
         data object Stalled : Attempt
+        data object TooSlow : Attempt
     }
+
+    /** Failures that usually pass on their own (YouTube's occasional 403, a network blip, a stall). */
+    private fun Attempt.isTransient() =
+        this is Attempt.Stalled || (this is Attempt.Failed && (error == EngineError.Forbidden || error == EngineError.Network))
 
     private suspend fun execute(jobId: String, label: String, showProgress: suspend (Notification) -> Unit): Outcome {
         val dao = app.db.jobs()
@@ -83,6 +90,11 @@ class DownloadRunner(private val app: SnaggleApp) {
         val title = arrayOf(job.title ?: label)
         val log = ArrayDeque<String>()
         var attempt = attempt(job, title, log, showProgress)
+        if (attempt.isTransient()) {
+            showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_retrying)))
+            delay(RETRY_DELAY_MS)
+            attempt = attempt(job, title, log, showProgress, fresh = attempt is Attempt.Stalled)
+        }
         if (attempt is Attempt.Failed && attempt.error.isSiteChange() && dao.get(jobId)?.nightly == NightlyState.NONE &&
             app.settings.current().nightlyRetry == NightlyRetry.AUTO
         ) {
@@ -104,6 +116,10 @@ class DownloadRunner(private val app: SnaggleApp) {
                 fail(job, title[0], app.getString(R.string.error_stalled), log, siteChange = false, offerNightly = false)
                 Outcome.FAILED
             }
+            Attempt.TooSlow -> {
+                fail(job, title[0], app.getString(R.string.error_too_slow), log, siteChange = false, offerNightly = false)
+                Outcome.FAILED
+            }
         }
     }
 
@@ -112,23 +128,37 @@ class DownloadRunner(private val app: SnaggleApp) {
         Notifications.showFailed(app, job.id, title, message, offerNightly)
     }
 
-    /** One engine download of [job]; on success the file is in MediaStore and the job is DONE. */
-    private suspend fun attempt(job: JobEntity, title: Array<String>, log: ArrayDeque<String>, showProgress: suspend (Notification) -> Unit): Attempt {
+    /**
+     * One engine download of [job]; on success the file is in MediaStore and the job is DONE.
+     * [fresh] uses its own engine id and directory: after a stall the old Python call may still be
+     * unwinding, and it would delete its files and cancel a run under the same id.
+     */
+    private suspend fun attempt(
+        job: JobEntity,
+        title: Array<String>,
+        log: ArrayDeque<String>,
+        showProgress: suspend (Notification) -> Unit,
+        fresh: Boolean = false,
+    ): Attempt {
         val dao = app.db.jobs()
         val jobId = job.id
-        val workDir = workDir(app, jobId).apply { mkdirs() }
+        val workDir = (if (fresh) File(workDir(app, jobId), "retry") else workDir(app, jobId)).apply { mkdirs() }
+        val engineId = if (fresh) "$jobId/retry" else jobId
         var lastEvent = System.currentTimeMillis()
         var lastUi = 0L
+        val speed = SlowDownloadDetector(SLOW_WINDOW_MS, SLOW_BYTES_PER_SEC)
         var result: Attempt = Attempt.Failed(EngineError.Unknown("Engine finished without a result"))
         try {
             coroutineScope {
                 val watchdog = launch {
                     while (true) {
                         delay(10_000)
-                        if (System.currentTimeMillis() - lastEvent > STALL_MS) throw StalledException()
+                        val now = System.currentTimeMillis()
+                        if (now - lastEvent > STALL_MS) throw StalledException()
+                        if (speed.check(now)) throw TooSlowException()
                     }
                 }
-                app.readyEngine().download(DownloadRequest(jobId, job.url, job.mode, workDir)).collect { event ->
+                app.readyEngine().download(DownloadRequest(engineId, job.url, job.mode, workDir)).collect { event ->
                     lastEvent = System.currentTimeMillis()
                     when (event) {
                         is DownloadEvent.Started -> {
@@ -136,19 +166,24 @@ class DownloadRunner(private val app: SnaggleApp) {
                             dao.setProgress(jobId, null, title[0])
                             showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_starting)))
                         }
-                        is DownloadEvent.Progress -> if (lastEvent - lastUi > UI_INTERVAL_MS) {
-                            lastUi = lastEvent
-                            dao.setProgress(jobId, event.fraction, null)
-                            val pct = event.fraction?.let { "${(it * 100).toInt()}%" } ?: app.getString(R.string.status_starting)
-                            showProgress(Notifications.progress(app, jobId, title[0], event.fraction, pct))
+                        is DownloadEvent.Progress -> {
+                            speed.onProgress(event.bytes)
+                            if (lastEvent - lastUi > UI_INTERVAL_MS) {
+                                lastUi = lastEvent
+                                dao.setProgress(jobId, event.fraction, null)
+                                val pct = event.fraction?.let { "${(it * 100).toInt()}%" } ?: app.getString(R.string.status_starting)
+                                showProgress(Notifications.progress(app, jobId, title[0], event.fraction, pct))
+                            }
                         }
-                        DownloadEvent.PostProcessing ->
+                        DownloadEvent.PostProcessing -> {
+                            speed.pause()
                             showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_finishing)))
+                        }
                         is DownloadEvent.Done -> {
                             title[0] = event.info.title.ifBlank { title[0] }
                             val saved = MediaStoreSaver.save(app, event.file)
                             dao.setDone(jobId, title[0], saved.uri.toString(), saved.mimeType)
-                            workDir.deleteRecursively()
+                            workDir(app, jobId).deleteRecursively()
                             Notifications.showSaved(app, jobId, title[0], saved.uri, saved.mimeType)
                             result = Attempt.Done
                         }
@@ -169,12 +204,17 @@ class DownloadRunner(private val app: SnaggleApp) {
             }
         } catch (e: StalledException) {
             result = Attempt.Stalled
+        } catch (e: TooSlowException) {
+            result = Attempt.TooSlow
         }
         return result
     }
 
     companion object {
         private const val STALL_MS = 120_000L
+        private const val SLOW_WINDOW_MS = 5 * 60_000L
+        private const val SLOW_BYTES_PER_SEC = 20 * 1024L
+        private const val RETRY_DELAY_MS = 10_000L
         private const val UI_INTERVAL_MS = 500L
 
         // At most two downloads at once; the rest wait with a "waiting" notification.

@@ -55,5 +55,5 @@ object EngineUpdates {
 fun EngineError.isSiteChange(): Boolean = when (this) {
     EngineError.BotCheck, EngineError.Unavailable, EngineError.FormatUnavailable,
     EngineError.Forbidden, EngineError.JsRuntimeMissing, is EngineError.Unknown -> true
-    EngineError.LoginRequired, EngineError.RateLimited, EngineError.Network, EngineError.Unsupported -> false
+    EngineError.LoginRequired, EngineError.RateLimited, EngineError.Network, EngineError.Unsupported, is EngineError.NoSpace -> false
 }

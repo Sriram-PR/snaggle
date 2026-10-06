@@ -7,6 +7,7 @@ through `sink.onEvent(str)`.
 import importlib
 import json
 import os
+import shutil
 import sys
 import tempfile
 import threading
@@ -198,6 +199,20 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
             raise _Cancelled()
 
     announced = []
+    no_space = []
+
+    def check_space(info):
+        formats = info.get('requested_formats') or [info]
+        sizes = [f.get('filesize') or f.get('filesize_approx') for f in formats]
+        if not all(sizes):
+            return  # unknown size: let the download find out
+        # The finished file is copied into the gallery, so it briefly exists twice.
+        have = sum(os.path.getsize(os.path.join(out_dir, n)) for n in os.listdir(out_dir))
+        needed = 2 * sum(sizes) - have + _SPACE_MARGIN
+        free = shutil.disk_usage(out_dir).free
+        if free < needed:
+            no_space.append((needed, free))
+            raise _NoSpace()
 
     def progress_hook(d):
         touched.update(filter(None, (d.get('filename'), d.get('tmpfilename'))))
@@ -216,7 +231,7 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         info = d.get('info_dict') or {}
         touched.update(filter(None, (info.get('filepath'), *(info.get('__files_to_merge') or ()))))
         check_cancel()
-        if d['status'] == 'started':
+        if d['status'] == 'started' and d.get('postprocessor') != 'SnaggleHook':
             emit(type='postprocessing', name=d.get('postprocessor'))
 
     extra = {
@@ -233,6 +248,7 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         _job_threads[job_id] = threading.get_ident()
     try:
         with yt_dlp.YoutubeDL(_params(sink, extra)) as ydl:
+            ydl.add_post_processor(_hook(check_space), when='before_dl')
             with _lock:
                 cached = _info_cache.pop(url, None)
             # Reuse the probe's extraction instead of hitting the site twice.
@@ -246,6 +262,8 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         if job_id in _cancelled:
             _delete_partials(touched)
             emit(type='cancelled')
+        elif no_space:
+            emit(type='nospace', needed=no_space[0][0], free=no_space[0][1])
         else:
             # Keep .part files: a retry resumes them.
             emit(type='error', message=str(e), trace=traceback.format_exc())
@@ -254,6 +272,25 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
             _cancelled.discard(job_id)
             _job_threads.pop(job_id, None)
             _procs.pop(threading.get_ident(), None)
+
+
+_SPACE_MARGIN = 50 * 1024 * 1024
+
+
+class _NoSpace(Exception):
+    pass
+
+
+def _hook(fn):
+    """A yt-dlp postprocessor that only calls fn(info)."""
+    from yt_dlp.postprocessor.common import PostProcessor
+
+    class SnaggleHookPP(PostProcessor):
+        def run(self, info):
+            fn(info)
+            return [], info
+
+    return SnaggleHookPP()
 
 
 def _delete_partials(paths):

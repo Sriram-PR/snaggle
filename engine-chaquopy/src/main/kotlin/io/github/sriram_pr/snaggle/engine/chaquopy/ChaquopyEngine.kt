@@ -293,6 +293,7 @@ class ChaquopyEngine(context: Context) : Engine {
                 ?: DownloadEvent.Failed(EngineError.Unknown("yt-dlp finished without an output file")),
         )
         "cancelled" -> listOf(DownloadEvent.Cancelled)
+        "nospace" -> listOf(DownloadEvent.Failed(EngineError.NoSpace(e.getLong("needed"), e.getLong("free"))))
         "error" -> listOf(
             DownloadEvent.Log("error", e.getString("trace")),
             DownloadEvent.Failed(EngineError.classify(e.getString("message"))),

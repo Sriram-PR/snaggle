@@ -10,6 +10,8 @@ sealed interface EngineError {
     data object Network : EngineError
     data object JsRuntimeMissing : EngineError
     data object Unsupported : EngineError
+    /** Not enough free storage for the download plus its gallery copy (bytes). */
+    data class NoSpace(val needed: Long, val free: Long) : EngineError
     data class Unknown(val raw: String) : EngineError
 
     companion object {
