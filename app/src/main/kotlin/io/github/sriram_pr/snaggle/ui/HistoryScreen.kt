@@ -130,6 +130,7 @@ fun HistoryScreen(onSettings: () -> Unit) {
                     Button(::submit, enabled = linkText.isNotBlank()) { Text(stringResource(R.string.action_download)) }
                 }
             }
+            item { EngineUpdatesPrompt(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
             if (jobs.isEmpty()) {
                 item {
                     Text(

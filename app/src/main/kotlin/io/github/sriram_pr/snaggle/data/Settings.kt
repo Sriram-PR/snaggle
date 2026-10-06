@@ -20,7 +20,9 @@ enum class UpdateFrequency(val intervalMs: Long?) {
 enum class NightlyRetry { ASK, AUTO }
 
 data class Settings(
-    val updateFrequency: UpdateFrequency = UpdateFrequency.DAILY,
+    // Manual until the user has chosen: no engine code is downloaded without consent.
+    val updateFrequency: UpdateFrequency = UpdateFrequency.MANUAL,
+    val updatesChosen: Boolean = false,
     val notifyEngineUpdates: Boolean = true,
     val nightlyRetry: NightlyRetry = NightlyRetry.ASK,
     val lastEngineCheck: Long = 0,
@@ -38,7 +40,8 @@ class SettingsStore(private val context: Context) {
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
         Settings(
-            updateFrequency = p[Keys.frequency]?.let { runCatching { UpdateFrequency.valueOf(it) }.getOrNull() } ?: UpdateFrequency.DAILY,
+            updateFrequency = p[Keys.frequency]?.let { runCatching { UpdateFrequency.valueOf(it) }.getOrNull() } ?: UpdateFrequency.MANUAL,
+            updatesChosen = Keys.frequency in p,
             notifyEngineUpdates = p[Keys.notify] ?: true,
             nightlyRetry = p[Keys.nightly]?.let { runCatching { NightlyRetry.valueOf(it) }.getOrNull() } ?: NightlyRetry.ASK,
             lastEngineCheck = p[Keys.lastCheck] ?: 0,

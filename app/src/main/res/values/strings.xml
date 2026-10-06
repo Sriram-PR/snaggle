@@ -70,4 +70,8 @@
     <string name="result_up_to_date">Up to date (%1$s)</string>
     <string name="result_failed">Couldn\'t update: %1$s</string>
     <string name="result_busy">Waiting for downloads to finish…</string>
+    <string name="updates_prompt_title">Keep Snaggle working?</string>
+    <string name="updates_prompt_body">Sites change often, and Snaggle\'s download engine (yt-dlp) needs updates to keep up. Snaggle can fetch them automatically from yt-dlp\'s GitHub releases. They don\'t come through the app store you installed Snaggle from, so the store hasn\'t checked them. You can change this later in Settings.</string>
+    <string name="updates_prompt_auto">Update automatically</string>
+    <string name="updates_prompt_manual">Only when I ask</string>
 </resources>

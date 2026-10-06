@@ -96,6 +96,7 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
                     }
                     Button({ choose(Mode.AUDIO) }, Modifier.weight(1f)) { Text(stringResource(R.string.share_audio)) }
                 }
+                EngineUpdatesPrompt()
             } else {
                 Text(stringResource(R.string.already_downloaded), style = MaterialTheme.typography.titleMedium)
                 Text(found.second.title ?: url, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
