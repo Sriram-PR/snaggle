@@ -12,3 +12,6 @@ captures/
 /native/.build/
 /native/out/
 __pycache__/
+
+# Local agent/session notes: personal paths, device details, preferences. Never committed.
+/.notes/
