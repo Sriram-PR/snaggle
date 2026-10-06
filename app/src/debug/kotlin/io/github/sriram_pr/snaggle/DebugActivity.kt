@@ -167,6 +167,16 @@ private fun SpikeScreen(
                 log("open: " + runCatching { context.contentResolver.openFileDescriptor(uri, "r")?.use { "ok" } }.fold({ it }, { it.javaClass.name + ": " + it.message }))
                 log("query: " + runCatching { context.contentResolver.query(uri, null, null, null, null)?.use { "rows=${it.count}" } }.fold({ it }, { it.javaClass.name + ": " + it.message }))
             }
+            "sig" -> timed("sig") {
+                // yt-dlp release signature check with the device's own crypto provider.
+                val tag = url.trim().ifEmpty { "yt-dlp/yt-dlp/releases/download/2026.08.19" }
+                val (sums, sig) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    java.net.URI("https://github.com/$tag/SHA2-256SUMS").toURL().readBytes() to
+                        java.net.URI("https://github.com/$tag/SHA2-256SUMS.sig").toURL().readBytes()
+                }
+                log("valid: ${io.github.sriram_pr.snaggle.engine.YtDlpSignature.verify(sums, sig)}")
+                log("tampered: ${io.github.sriram_pr.snaggle.engine.YtDlpSignature.verify(sums + 0x0a, sig)}")
+            }
             "versions" -> timed("versions") { log("${engine().versions()} installed=${engine().installedYtDlp()}") }
         }
         pendingAction.value = null

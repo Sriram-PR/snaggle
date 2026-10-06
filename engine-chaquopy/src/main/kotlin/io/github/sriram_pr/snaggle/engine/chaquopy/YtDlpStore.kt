@@ -2,6 +2,7 @@ package io.github.sriram_pr.snaggle.engine.chaquopy
 
 import android.content.res.AssetManager
 import io.github.sriram_pr.snaggle.engine.Channel
+import io.github.sriram_pr.snaggle.engine.YtDlpSignature
 import io.github.sriram_pr.snaggle.engine.YtDlpVersion
 import org.json.JSONArray
 import org.json.JSONObject
@@ -69,12 +70,19 @@ class YtDlpStore(private val root: File, private val assets: AssetManager) {
         }
     }
 
-    /** Downloads [version] if it isn't on disk yet, verifying it against the release's SHA2-256SUMS. */
+    /**
+     * Downloads [version] if it isn't on disk yet, verifying it against the release's SHA2-256SUMS,
+     * which must carry a valid signature by yt-dlp's release key.
+     */
     fun download(channel: Channel, version: String): Installed {
         val target = Installed(channel, version, dirFor(channel, version))
         if (target.zip.exists()) return target
         val base = "https://github.com/${repo(channel)}/releases/download/$version"
-        val expected = fetch("$base/SHA2-256SUMS").decodeToString().lineSequence()
+        val sums = fetch("$base/SHA2-256SUMS")
+        if (!YtDlpSignature.verify(sums, fetch("$base/SHA2-256SUMS.sig"))) {
+            throw IOException("Bad signature on SHA2-256SUMS of yt-dlp $version")
+        }
+        val expected = sums.decodeToString().lineSequence()
             .map { it.trim().split(Regex("\\s+")) }
             .firstOrNull { it.size == 2 && it[1] == "yt-dlp" }?.get(0)
             ?: throw IOException("yt-dlp missing from SHA2-256SUMS of $version")
