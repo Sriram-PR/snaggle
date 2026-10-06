@@ -2,6 +2,8 @@
 # Usage: scripts/spike.sh <init|probe|video|720|audio|cancel> [url] [timeout_s] [yt-dlp params JSON]
 # Triggers an action in the spike app and prints its log until the action finishes.
 ACTION="$1"; URL="$2"; TIMEOUT="${3:-300}"; PARAMS="${4:-}"
+# Same adb as Android Studio (the SDK copy); mixing versions restarts the server and drops the device.
+adb() { "${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb" "$@"; }
 LOG="$(mktemp "${TMPDIR:-/tmp}/spike.XXXXXX")"
 adb logcat -c
 adb logcat -v brief -s Spike:I Engine:D python.stderr:W python.stdout:I AndroidRuntime:E > "$LOG" &

@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "io.github.sriram_pr.snaggle"
-    compileSdk = 36
+    compileSdk = 37
     buildToolsVersion = "36.1.0" // installed version; SDK auto-download is off
 
     defaultConfig {
