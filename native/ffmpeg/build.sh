@@ -42,6 +42,8 @@ for ABI in "${ABIS[@]}"; do
     tar -xf "$TARBALL" -C "$SRC" --strip-components=1
     cd "$SRC"
 
+    # Remux only, plus the VP9 decoder: probing needs it to learn VP9's pixel format, without
+    # which the MP4 muxer writes an empty vpcC box and Android can't read the file.
     ./configure \
         --prefix="$SRC/install" \
         --target-os=android --arch="$ARCH" --enable-cross-compile \
@@ -60,6 +62,7 @@ for ABI in "${ABIS[@]}"; do
         --enable-muxer=mp4,ipod,mov,matroska,webm,adts,mp3,ogg,opus \
         --enable-parser=h264,hevc,aac,aac_latm,vp8,vp9,av1,opus,vorbis,mpegaudio,flac \
         --enable-bsf=aac_adtstoasc,h264_mp4toannexb,hevc_mp4toannexb,extract_extradata,vp9_superframe,setts \
+        --enable-decoder=vp9 \
         --extra-cflags="-O2" \
         --extra-ldflags="-Wl,-z,max-page-size=16384"
 

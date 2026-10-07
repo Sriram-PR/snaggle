@@ -1,5 +1,6 @@
 import java.net.URI
 import java.security.MessageDigest
+import javax.inject.Inject
 
 plugins {
     alias(libs.plugins.android.library)
@@ -89,10 +90,31 @@ val fetchYtDlp = tasks.register<FetchYtDlp>("fetchYtDlp") {
     outputDir = layout.buildDirectory.dir("generated/ytdlp-assets")
 }
 
+// ffmpeg/ffprobe/qjs built by native/*/build.sh, shipped as lib*.so executables. Copied through a task
+// because a static jniLibs directory isn't tracked as an input: rebuilt binaries were silently ignored.
+abstract class CopyNativeBinaries : DefaultTask() {
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE) abstract val source: DirectoryProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+    @get:Inject abstract val fs: FileSystemOperations
+
+    @TaskAction
+    fun copy() {
+        fs.sync {
+            from(source) { include("*/lib*.so") }
+            into(outputDir)
+        }
+    }
+}
+
+val copyNativeBinaries = tasks.register<CopyNativeBinaries>("copyNativeBinaries") {
+    dependsOn(checkNativeBinaries)
+    source = rootProject.layout.projectDirectory.dir("native/out")
+    outputDir = layout.buildDirectory.dir("generated/native-libs")
+}
+
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(fetchYtDlp, FetchYtDlp::outputDir)
-        // ffmpeg/ffprobe/qjs built by native/*/build.sh, shipped as lib*.so executables.
-        variant.sources.jniLibs?.addStaticSourceDirectory(rootProject.file("native/out").path)
+        variant.sources.jniLibs?.addGeneratedSourceDirectory(copyNativeBinaries, CopyNativeBinaries::outputDir)
     }
 }
