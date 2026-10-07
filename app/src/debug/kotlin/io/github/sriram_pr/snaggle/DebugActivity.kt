@@ -81,6 +81,8 @@ private object Spike {
     val log = mutableStateListOf<String>()
     var job: Job? = null
     var jobId = 0
+    var lastFile: File? = null
+    var lastSaved: android.net.Uri? = null
 }
 
 @Composable
@@ -142,7 +144,10 @@ private fun SpikeScreen(
                         }
                     }
                     is DownloadEvent.Log -> if (ev.level != "debug") log("  [${ev.level}] ${ev.message.take(800)}")
-                    is DownloadEvent.Done -> log("✓ ${ev.file} (${ev.file.length() / 1024} KiB)")
+                    is DownloadEvent.Done -> {
+                        Spike.lastFile = ev.file
+                        log("✓ ${ev.file} (${ev.file.length() / 1024} KiB)")
+                    }
                     else -> log("  $ev")
                 }
             }
@@ -176,6 +181,35 @@ private fun SpikeScreen(
                 }
                 log("valid: ${io.github.sriram_pr.snaggle.engine.YtDlpSignature.verify(sums, sig)}")
                 log("tampered: ${io.github.sriram_pr.snaggle.engine.YtDlpSignature.verify(sums + 0x0a, sig)}")
+            }
+            "codecs" -> timed("codecs") {
+                // Decoders the "Original quality" choice would rely on.
+                val list = android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS)
+                for (mime in listOf("video/avc", "video/hevc", "video/x-vnd.on2.vp9", "video/av01")) {
+                    list.codecInfos.filter { !it.isEncoder && mime in it.supportedTypes }.forEach { info ->
+                        val v = info.getCapabilitiesForType(mime).videoCapabilities
+                        log("$mime ${info.name} hw=${info.isHardwareAccelerated} sw=${info.isSoftwareOnly} " +
+                            "1440p60=${v?.areSizeAndRateSupported(2560, 1440, 60.0)} 2160p60=${v?.areSizeAndRateSupported(3840, 2160, 60.0)}")
+                    }
+                }
+            }
+            "save" -> timed("save") {
+                // Last debug download → gallery, the way real downloads are saved.
+                val file = Spike.lastFile ?: error("no download yet")
+                val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    io.github.sriram_pr.snaggle.download.MediaStoreSaver.save(context, file)
+                }
+                Spike.lastSaved = saved.uri
+                log("saved ${saved.uri} ${saved.mimeType}")
+                context.contentResolver.query(saved.uri, arrayOf("mime_type", "width", "height", "duration", "_size"), null, null, null)?.use {
+                    if (it.moveToFirst()) log("mediastore: mime=${it.getString(0)} ${it.getInt(1)}x${it.getInt(2)} duration=${it.getLong(3)}ms size=${it.getLong(4)}")
+                }
+                val thumb = runCatching { context.contentResolver.loadThumbnail(saved.uri, android.util.Size(320, 180), null) }
+                log("thumbnail: " + thumb.fold({ "${it.width}x${it.height}" }, { it.toString() }))
+            }
+            "play" -> timed("play") {
+                val uri = Spike.lastSaved ?: error("nothing saved")
+                context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, context.contentResolver.getType(uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
             }
             "versions" -> timed("versions") { log("${engine().versions()} installed=${engine().installedYtDlp()}") }
         }
