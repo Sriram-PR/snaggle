@@ -95,6 +95,12 @@ class DownloadRunner(private val app: SnaggleApp) {
             delay(RETRY_DELAY_MS)
             attempt = attempt(job, title, log, showProgress, fresh = attempt is Attempt.Stalled)
         }
+        // YouTube's 403s often clear within half a minute; one more, slower try for those only.
+        if (attempt is Attempt.Failed && attempt.error == EngineError.Forbidden) {
+            showProgress(Notifications.progress(app, jobId, title[0], null, app.getString(R.string.status_retrying_forbidden)))
+            delay(FORBIDDEN_RETRY_DELAY_MS)
+            attempt = attempt(job, title, log, showProgress)
+        }
         if (attempt is Attempt.Failed && attempt.error.isSiteChange() && dao.get(jobId)?.nightly == NightlyState.NONE &&
             app.settings.current().nightlyRetry == NightlyRetry.AUTO
         ) {
@@ -223,6 +229,7 @@ class DownloadRunner(private val app: SnaggleApp) {
         private const val SLOW_WINDOW_MS = 5 * 60_000L
         private const val SLOW_BYTES_PER_SEC = 20 * 1024L
         private const val RETRY_DELAY_MS = 10_000L
+        private const val FORBIDDEN_RETRY_DELAY_MS = 30_000L
         private const val UI_INTERVAL_MS = 500L
 
         // At most two downloads at once; the rest wait with a "waiting" notification.

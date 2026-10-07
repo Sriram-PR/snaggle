@@ -79,4 +79,5 @@
     <string name="error_no_space">Not enough storage space. This download needs %1$s, but only %2$s is free.</string>
     <string name="error_too_slow">This download is too slow. Check your connection and retry.</string>
     <string name="status_retrying">Retrying…</string>
+    <string name="status_retrying_forbidden">The site refused the download. Trying again in 30 seconds…</string>
 </resources>

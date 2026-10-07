@@ -43,6 +43,7 @@ object Notifications {
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
             .setContentText(status)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(status))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(100, ((fraction ?: 0f) * 100).toInt(), fraction == null)
