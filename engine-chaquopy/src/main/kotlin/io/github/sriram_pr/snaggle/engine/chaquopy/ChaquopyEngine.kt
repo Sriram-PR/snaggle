@@ -16,6 +16,7 @@ import io.github.sriram_pr.snaggle.engine.EngineException
 import io.github.sriram_pr.snaggle.engine.EngineStatus
 import io.github.sriram_pr.snaggle.engine.EngineVersions
 import io.github.sriram_pr.snaggle.engine.Formats
+import io.github.sriram_pr.snaggle.engine.MediaFormat
 import io.github.sriram_pr.snaggle.engine.MediaInfo
 import io.github.sriram_pr.snaggle.engine.UpdateResult
 import io.github.sriram_pr.snaggle.engine.YtDlpInstall
@@ -162,7 +163,7 @@ class ChaquopyEngine(context: Context) : Engine {
             val result = JSONObject(py().callAttr("probe", url, sink).toString())
             val formats = result.getJSONArray("formats")
             for (i in 0 until formats.length()) Log.d(TAG, "format ${formats.getJSONObject(i)}")
-            return result.toMediaInfo()
+            return result.toMediaInfo().copy(formats = (0 until formats.length()).map { formats.getJSONObject(it).toMediaFormat() })
         } catch (e: PyException) {
             throw EngineException(EngineError.classify(e.message ?: ""), e)
         }
@@ -175,7 +176,7 @@ class ChaquopyEngine(context: Context) : Engine {
                 .forEach { Log.i(TAG, "download ${req.jobId}: $it") }
             events.forEach { trySendBlocking(it) }
         }
-        val (format, merge) = Formats.forMode(req.mode)
+        val (format, merge) = req.format?.let { it to req.merge } ?: Formats.forMode(req.mode)
         req.outputDir.mkdirs()
         val finished = AtomicBoolean(false)
         launch(Dispatchers.IO) {
@@ -305,6 +306,23 @@ class ChaquopyEngine(context: Context) : Engine {
 private fun JSONObject.str(key: String): String? = if (isNull(key)) null else getString(key)
 
 private fun JSONObject.long(key: String): Long? = if (isNull(key)) null else getDouble(key).toLong()
+
+private fun JSONObject.toMediaFormat() = MediaFormat(
+    id = getString("format_id"),
+    ext = str("ext"),
+    vcodec = str("vcodec"),
+    acodec = str("acodec"),
+    height = num("height")?.toInt(),
+    fps = num("fps"),
+    tbr = num("tbr"),
+    abr = num("abr"),
+    sizeBytes = num("size")?.toLong(),
+    language = str("language"),
+    languagePreference = num("language_preference")?.toInt(),
+    dynamicRange = str("dynamic_range"),
+)
+
+private fun JSONObject.num(key: String): Double? = if (isNull(key)) null else optDouble(key).takeUnless { it.isNaN() }
 
 private fun JSONObject.toMediaInfo() = MediaInfo(
     id = getString("id"),

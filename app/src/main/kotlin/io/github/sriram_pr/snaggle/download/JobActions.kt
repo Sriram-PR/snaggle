@@ -19,16 +19,24 @@ import java.util.UUID
 
 /** User-facing operations on jobs, shared by the share sheet, the history screen and notifications. */
 object JobActions {
-    suspend fun start(context: Context, url: String, mode: Mode): String {
+    /** A "More qualities" choice; null means the [Mode]'s default. */
+    data class Choice(val format: String, val merge: String?, val label: String)
+
+    suspend fun start(context: Context, url: String, mode: Mode, choice: Choice? = null): String {
         val id = UUID.randomUUID().toString()
-        context.snaggle.db.jobs().insert(JobEntity(id = id, url = url, mode = mode, status = JobStatus.QUEUED))
+        context.snaggle.db.jobs().insert(
+            JobEntity(
+                id = id, url = url, mode = mode, status = JobStatus.QUEUED,
+                format = choice?.format, merge = choice?.merge, qualityLabel = choice?.label,
+            ),
+        )
         DownloadScheduler.enqueue(context, id)
         return id
     }
 
-    /** A finished download of the same link and mode whose file still exists, if any. */
-    suspend fun findExisting(context: Context, url: String, mode: Mode): JobEntity? =
-        context.snaggle.db.jobs().findDone(url, mode)?.takeIf { fileState(context, it) != FileState.MISSING }
+    /** A finished download of the same link, mode and quality whose file still exists, if any. */
+    suspend fun findExisting(context: Context, url: String, mode: Mode, format: String? = null): JobEntity? =
+        context.snaggle.db.jobs().findDone(url, mode, format)?.takeIf { fileState(context, it) != FileState.MISSING }
 
     suspend fun retry(context: Context, job: JobEntity) {
         context.snaggle.db.jobs().requeue(job.id)

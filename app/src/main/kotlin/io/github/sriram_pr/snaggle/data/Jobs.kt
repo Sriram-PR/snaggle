@@ -36,6 +36,10 @@ data class JobEntity(
     val nightly: NightlyState = NightlyState.NONE,
     /** Versions, error and recent engine log from the last failure, for "Copy debug report". */
     val report: String? = null,
+    /** A "More qualities" choice: yt-dlp selector, output container and the label shown in history. */
+    val format: String? = null,
+    val merge: String? = null,
+    val qualityLabel: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
@@ -68,11 +72,11 @@ interface JobDao {
 
     @Query("DELETE FROM jobs WHERE id = :id") suspend fun delete(id: String)
 
-    @Query("SELECT * FROM jobs WHERE url = :url AND mode = :mode AND status = 'DONE' ORDER BY createdAt DESC LIMIT 1")
-    suspend fun findDone(url: String, mode: Mode): JobEntity?
+    @Query("SELECT * FROM jobs WHERE url = :url AND mode = :mode AND format IS :format AND status = 'DONE' ORDER BY createdAt DESC LIMIT 1")
+    suspend fun findDone(url: String, mode: Mode, format: String?): JobEntity?
 }
 
-@Database(entities = [JobEntity::class], version = 3, exportSchema = false)
+@Database(entities = [JobEntity::class], version = 4, exportSchema = false)
 abstract class SnaggleDb : RoomDatabase() {
     abstract fun jobs(): JobDao
 
@@ -90,7 +94,15 @@ abstract class SnaggleDb : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE jobs ADD COLUMN format TEXT")
+                db.execSQL("ALTER TABLE jobs ADD COLUMN merge TEXT")
+                db.execSQL("ALTER TABLE jobs ADD COLUMN qualityLabel TEXT")
+            }
+        }
+
         fun create(context: Context): SnaggleDb =
-            Room.databaseBuilder(context, SnaggleDb::class.java, "snaggle.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
+            Room.databaseBuilder(context, SnaggleDb::class.java, "snaggle.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
     }
 }

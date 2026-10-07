@@ -172,7 +172,7 @@ class DownloadRunner(private val app: SnaggleApp) {
                         }
                     }
                 }
-                app.readyEngine().download(DownloadRequest(engineId, job.url, job.mode, workDir)).collect { event ->
+                app.readyEngine().download(DownloadRequest(engineId, job.url, job.mode, workDir, job.format, job.merge)).collect { event ->
                     lastEvent = System.currentTimeMillis()
                     when (event) {
                         is DownloadEvent.Started -> {

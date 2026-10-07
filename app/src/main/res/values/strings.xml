@@ -41,6 +41,8 @@
     <string name="status_file_missing">File was removed from the device</string>
     <string name="status_saved_video">Video · Movies/Snaggle</string>
     <string name="status_saved_audio">Audio · Music/Snaggle</string>
+    <string name="status_saved_quality_video">%1$s · Movies/Snaggle</string>
+    <string name="status_saved_quality_audio">%1$s · Music/Snaggle</string>
     <string name="open_failed">No app can open this file.</string>
     <string name="channel_engine">Engine updates</string>
     <string name="status_updating_engine">Updating the download engine…</string>
@@ -80,4 +82,15 @@
     <string name="error_too_slow">This download is too slow. Check your connection and retry.</string>
     <string name="status_retrying">Retrying…</string>
     <string name="status_retrying_forbidden">The site refused the download. Trying again in 30 seconds…</string>
+    <string name="action_more_qualities">More qualities ›</string>
+    <string name="qualities_failed">Couldn\'t load the qualities for this link.</string>
+    <string name="qualities_video">VIDEO</string>
+    <string name="qualities_video_only">VIDEO ONLY (no sound)</string>
+    <string name="qualities_audio">AUDIO</string>
+    <string name="qualities_language">Language: %1$s</string>
+    <string name="qualities_audio_best">Best (AAC %1$d kbps)</string>
+    <string name="qualities_audio_small">Small (AAC %1$d kbps)</string>
+    <string name="qualities_plays_everywhere">Plays everywhere</string>
+    <string name="qualities_original">Original</string>
+    <string name="qualities_label_video_only">Video only · %1$s</string>
 </resources>

@@ -256,6 +256,10 @@ private fun statusText(job: JobEntity, missing: Boolean): String = when {
     job.status == JobStatus.QUEUED -> stringResource(R.string.status_queued)
     job.status == JobStatus.CANCELLED -> stringResource(R.string.status_cancelled)
     job.status == JobStatus.FAILED -> job.error ?: stringResource(R.string.status_failed)
+    job.qualityLabel != null -> stringResource(
+        if (job.mode == Mode.AUDIO) R.string.status_saved_quality_audio else R.string.status_saved_quality_video,
+        job.qualityLabel,
+    )
     job.mode == Mode.AUDIO -> stringResource(R.string.status_saved_audio)
     else -> stringResource(R.string.status_saved_video)
 }

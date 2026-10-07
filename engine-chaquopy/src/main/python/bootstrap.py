@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import threading
+import time
 import traceback
 import zipimport
 
@@ -19,7 +20,9 @@ _cancelled = set()
 _keep_files = set()  # cancelled jobs whose partial files stay for a later resume
 _job_threads = {}  # job_id -> thread ident running it
 _procs = {}  # thread ident -> live ffmpeg/ffprobe Popen objects
-_info_cache = {}
+_info_cache = {}  # url -> (time.monotonic(), info) from probe, reused by the next download
+# Stream URLs expire (YouTube's after hours), so only a recent probe is worth reusing.
+_INFO_CACHE_SECONDS = 300
 _lock = threading.Lock()
 
 
@@ -169,13 +172,22 @@ def probe(url, sink=None):
     with yt_dlp.YoutubeDL(_params(sink, {'format': 'all'})) as ydl:
         info = ydl.extract_info(url, download=False)
     with _lock:
-        _info_cache[url] = info
-    out = _summary(info)
+        _info_cache[url] = (time.monotonic(), info)
+    out = _summary(_playable(info))
     out['formats'] = [
-        {k: f.get(k) for k in ('format_id', 'ext', 'vcodec', 'acodec', 'height', 'tbr', 'protocol')}
-        for f in info.get('formats') or []
+        {**{k: f.get(k) for k in ('format_id', 'ext', 'vcodec', 'acodec', 'height', 'fps', 'tbr', 'abr', 'protocol',
+                                   'language', 'language_preference', 'dynamic_range')},
+         'size': f.get('filesize') or f.get('filesize_approx')}
+        for f in _playable(info).get('formats') or []
     ]
     return json.dumps(out)
+
+
+def _playable(info):
+    """The video itself; for a playlist page or multi-video post, its first entry (see playlist_items)."""
+    while info.get('_type') == 'playlist' and info.get('entries'):
+        info = info['entries'][0]
+    return info
 
 
 def cancel(job_id, keep_files=False):
@@ -249,6 +261,8 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
     }
     if merge_format:
         extra['merge_output_format'] = merge_format
+        # A single non-MP4 stream (e.g. video-only VP9 WebM) isn't merged, so remux it too.
+        extra['postprocessors'] = [{'key': 'FFmpegVideoRemuxer', 'preferedformat': merge_format}]
 
     with _lock:
         _job_threads[job_id] = threading.get_ident()
@@ -256,11 +270,12 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         with yt_dlp.YoutubeDL(_params(sink, extra)) as ydl:
             ydl.add_post_processor(_hook(check_space), when='before_dl')
             with _lock:
-                cached = _info_cache.pop(url, None)
+                probed_at, cached = _info_cache.pop(url, (0, None))
+            if time.monotonic() - probed_at > _INFO_CACHE_SECONDS:
+                cached = None
             # Reuse the probe's extraction instead of hitting the site twice.
             info = ydl.process_ie_result(cached, download=True) if cached else ydl.extract_info(url, download=True)
-        while info.get('_type') == 'playlist' and info.get('entries'):
-            info = info['entries'][0]
+        info = _playable(info)
         downloads = info.get('requested_downloads') or []
         path = downloads[-1].get('filepath') if downloads else None
         emit(type='done', path=path, info=_summary(info))

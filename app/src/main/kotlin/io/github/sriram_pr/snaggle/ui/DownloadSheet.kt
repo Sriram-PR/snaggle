@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -46,8 +48,9 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var dataSaver by remember { mutableStateOf(false) }
-    var existing by remember { mutableStateOf<Pair<Mode, JobEntity>?>(null) }
-    var pendingMode by remember { mutableStateOf<Mode?>(null) }
+    var existing by remember { mutableStateOf<Existing?>(null) }
+    var pending by remember { mutableStateOf<Pair<Mode, JobActions.Choice?>?>(null) }
+    var showQualities by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // Slide the sheet down first, then dismiss, instead of the window vanishing mid-sheet.
@@ -55,27 +58,27 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
         sheetState.hide()
         onDismiss()
     }
-    fun startNow(mode: Mode) = scope.launch {
-        JobActions.start(context, url, mode)
+    fun startNow(mode: Mode, choice: JobActions.Choice?) = scope.launch {
+        JobActions.start(context, url, mode, choice)
         close()
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         // Downloads run either way; without the permission they only show in Task Manager.
-        pendingMode?.let { startNow(it) }
+        pending?.let { (mode, choice) -> startNow(mode, choice) }
     }
-    fun begin(mode: Mode) {
+    fun begin(mode: Mode, choice: JobActions.Choice?) {
         val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         if (needsPermission) {
-            pendingMode = mode
+            pending = mode to choice
             permission.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            startNow(mode)
+            startNow(mode, choice)
         }
     }
-    fun choose(mode: Mode) = scope.launch {
-        val found = withContext(Dispatchers.IO) { JobActions.findExisting(context, url, mode) }
-        if (found != null) existing = mode to found else begin(mode)
+    fun choose(mode: Mode, choice: JobActions.Choice? = null) = scope.launch {
+        val found = withContext(Dispatchers.IO) { JobActions.findExisting(context, url, mode, choice?.format) }
+        if (found != null) existing = Existing(mode, choice, found) else begin(mode, choice)
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
@@ -84,7 +87,9 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val found = existing
-            if (found == null) {
+            if (found == null && showQualities) {
+                QualitiesPane(url, ::choose)
+            } else if (found == null) {
                 Text(url, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(!dataSaver, { dataSaver = false }, { Text(stringResource(R.string.share_quality_compatible)) })
@@ -96,18 +101,23 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
                     }
                     Button({ choose(Mode.AUDIO) }, Modifier.weight(1f)) { Text(stringResource(R.string.share_audio)) }
                 }
+                TextButton({ showQualities = true }, Modifier.align(Alignment.CenterHorizontally)) {
+                    Text(stringResource(R.string.action_more_qualities))
+                }
                 EngineUpdatesPrompt()
             } else {
                 Text(stringResource(R.string.already_downloaded), style = MaterialTheme.typography.titleMedium)
-                Text(found.second.title ?: url, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(found.job.title ?: url, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(R.string.already_downloaded_body), style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton({ JobActions.open(context, found.second); close() }, Modifier.weight(1f)) {
+                    OutlinedButton({ JobActions.open(context, found.job); close() }, Modifier.weight(1f)) {
                         Text(stringResource(R.string.action_open))
                     }
-                    Button({ begin(found.first) }, Modifier.weight(1f)) { Text(stringResource(R.string.action_download_again)) }
+                    Button({ begin(found.mode, found.choice) }, Modifier.weight(1f)) { Text(stringResource(R.string.action_download_again)) }
                 }
             }
         }
     }
 }
+
+private data class Existing(val mode: Mode, val choice: JobActions.Choice?, val job: JobEntity)

@@ -27,7 +27,15 @@ enum class Mode { VIDEO_COMPAT, VIDEO_720, AUDIO }
 
 enum class Channel { STABLE, NIGHTLY }
 
-data class DownloadRequest(val jobId: String, val url: String, val mode: Mode, val outputDir: File)
+/** [format]/[merge] override the [mode]'s defaults, e.g. a choice from "More qualities". */
+data class DownloadRequest(
+    val jobId: String,
+    val url: String,
+    val mode: Mode,
+    val outputDir: File,
+    val format: String? = null,
+    val merge: String? = null,
+)
 
 data class MediaInfo(
     val id: String,
@@ -35,6 +43,23 @@ data class MediaInfo(
     val extractor: String,
     val durationSec: Double?,
     val thumbnail: String?,
+    val formats: List<MediaFormat> = emptyList(),
+)
+
+/** One downloadable stream as yt-dlp reports it; a codec is "none" without that track, null when unknown. */
+data class MediaFormat(
+    val id: String,
+    val ext: String?,
+    val vcodec: String?,
+    val acodec: String?,
+    val height: Int?,
+    val fps: Double?,
+    val tbr: Double?,
+    val abr: Double?,
+    val sizeBytes: Long?,
+    val language: String?,
+    val languagePreference: Int?,
+    val dynamicRange: String?,
 )
 
 sealed interface EngineStatus {
