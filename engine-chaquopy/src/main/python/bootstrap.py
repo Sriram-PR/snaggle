@@ -202,7 +202,7 @@ def cancel(job_id, keep_files=False):
         proc.kill()
 
 
-def download(job_id, url, fmt, merge_format, out_dir, sink):
+def download(job_id, url, fmt, merge_format, out_dir, sink, audio_only=False):
     """Blocking; reports through sink. Returns nothing: the final event is done/cancelled/error."""
     import yt_dlp
 
@@ -263,6 +263,10 @@ def download(job_id, url, fmt, merge_format, out_dir, sink):
         extra['merge_output_format'] = merge_format
         # A single non-MP4 stream (e.g. video-only VP9 WebM) isn't merged, so remux it too.
         extra['postprocessors'] = [{'key': 'FFmpegVideoRemuxer', 'preferedformat': merge_format}]
+    if audio_only:
+        # Audio taken from an MP4 (sites that don't report AAC) ends up as .m4a. AAC is copied, never
+        # re-encoded; a .m4a download is left alone; other codecs fail (this ffmpeg has no encoders).
+        extra['postprocessors'] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'm4a'}]
 
     with _lock:
         _job_threads[job_id] = threading.get_ident()

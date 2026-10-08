@@ -89,6 +89,7 @@
     <string name="qualities_audio">AUDIO</string>
     <string name="qualities_language">Language: %1$s</string>
     <string name="qualities_audio_best">Best (AAC %1$d kbps)</string>
+    <string name="qualities_audio_plain">Audio (.m4a)</string>
     <string name="qualities_audio_small">Small (AAC %1$d kbps)</string>
     <string name="qualities_plays_everywhere">Plays everywhere</string>
     <string name="qualities_original">Original</string>

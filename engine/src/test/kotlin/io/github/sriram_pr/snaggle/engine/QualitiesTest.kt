@@ -82,7 +82,8 @@ class QualitiesTest {
         assertEquals(listOf(720, 360), o.video.map { it.height })
         assertEquals(6 * mb, o.video.first().sizeBytes)
         assertTrue(o.videoOnly.isEmpty())
-        assertTrue(o.audio.isEmpty())
+        // Audio comes out of the single file (AAC copied into .m4a); its size is unknown.
+        assertEquals(listOf(Quality(Kind.AUDIO)), o.audio)
     }
 
     @Test fun unknownCodecSingleFiles() {
@@ -102,7 +103,8 @@ class QualitiesTest {
         assertEquals(5_999_776L, o.video.first().sizeBytes)
         assertEquals("b[height=720][ext=mp4]" to "mp4", o.video.first().selector(null))
         assertEquals(listOf(720, 270), o.videoOnly.map { it.height })
-        assertTrue(o.audio.isEmpty())
+        // The HLS audio of unknown codec, extracted into .m4a.
+        assertEquals(listOf(Quality(Kind.AUDIO)), o.audio)
         assertEquals(720, o.default?.height)
     }
 
@@ -131,5 +133,7 @@ class QualitiesTest {
         val (small, smallMerge) = o.audio.first { it.small }.selector(null)
         assertTrue(small.startsWith("wa["), small)
         assertNull(smallMerge)
+        // Every audio choice ends in the same fallbacks as the plain Audio button.
+        assertTrue(small.endsWith("/ba[ext=m4a]/ba[ext=mp4]/b[ext=mp4]"), small)
     }
 }

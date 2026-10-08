@@ -34,7 +34,7 @@ data class Quality(
         val lang = language?.let { "[language=$it]" }
         val audio = listOfNotNull(lang?.let { "$AAC$NO_DRC$it" }, "$AAC$NO_DRC", AAC)
         return when (kind) {
-            Kind.AUDIO -> audio.joinToString("/") { (if (small) "wa" else "ba") + it } to null
+            Kind.AUDIO -> (audio.map { (if (small) "wa" else "ba") + it } + Formats.AUDIO_FALLBACK).joinToString("/") to null
             Kind.VIDEO_ONLY -> "bv${videoFilter()}" to "mp4"
             Kind.VIDEO -> if (codec == null) "b[height=$height][ext=mp4]" to "mp4" else {
                 val v = videoFilter()
@@ -81,6 +81,8 @@ object Qualities {
 
         val audio = buildList {
             bestAudio?.let { add(Quality(Quality.Kind.AUDIO, sizeBytes = it.sizeBytes, kbps = it.abr?.roundToInt())) }
+            // Nothing known to be AAC: still offer the fallback (audio-only MP4, else out of the single file).
+            if (bestAudio == null && formats.any { it.ext in setOf("m4a", "mp4") && it.acodec != NONE }) add(Quality(Quality.Kind.AUDIO))
             val smallest = aacAudio.minByOrNull { it.abr ?: Double.MAX_VALUE }
             if (bestAudio != null && smallest != null && (smallest.abr ?: 0.0) < (bestAudio.abr ?: 0.0) * 0.75) {
                 add(Quality(Quality.Kind.AUDIO, small = true, sizeBytes = smallest.sizeBytes, kbps = smallest.abr?.roundToInt()))

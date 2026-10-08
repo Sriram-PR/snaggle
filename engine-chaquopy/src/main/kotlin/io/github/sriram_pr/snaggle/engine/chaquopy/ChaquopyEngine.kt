@@ -18,6 +18,7 @@ import io.github.sriram_pr.snaggle.engine.EngineVersions
 import io.github.sriram_pr.snaggle.engine.Formats
 import io.github.sriram_pr.snaggle.engine.MediaFormat
 import io.github.sriram_pr.snaggle.engine.MediaInfo
+import io.github.sriram_pr.snaggle.engine.Mode
 import io.github.sriram_pr.snaggle.engine.UpdateResult
 import io.github.sriram_pr.snaggle.engine.YtDlpInstall
 import io.github.sriram_pr.snaggle.engine.YtDlpVersion
@@ -182,7 +183,7 @@ class ChaquopyEngine(context: Context) : Engine {
         launch(Dispatchers.IO) {
             job {
                 try {
-                    py().callAttr("download", req.jobId, req.url, format, merge, req.outputDir.path, sink)
+                    py().callAttr("download", req.jobId, req.url, format, merge, req.outputDir.path, sink, req.mode == Mode.AUDIO)
                 } catch (e: PyException) {
                     trySendBlocking(DownloadEvent.Failed(EngineError.Unknown(e.message ?: e.toString())))
                 }

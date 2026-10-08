@@ -158,10 +158,10 @@ private fun height(q: Quality): String {
 }
 
 private fun rowTitle(context: Context, q: Quality): String = when (q.kind) {
-    Quality.Kind.AUDIO -> context.getString(
-        if (q.small) R.string.qualities_audio_small else R.string.qualities_audio_best,
-        q.kbps ?: 0,
-    )
+    // No bitrate: the site didn't report the codec (the audio comes out of an MP4).
+    Quality.Kind.AUDIO -> q.kbps?.let {
+        context.getString(if (q.small) R.string.qualities_audio_small else R.string.qualities_audio_best, it)
+    } ?: context.getString(R.string.qualities_audio_plain)
     else -> height(q)
 }
 
