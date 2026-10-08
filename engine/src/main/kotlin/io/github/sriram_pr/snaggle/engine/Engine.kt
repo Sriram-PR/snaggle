@@ -5,7 +5,10 @@ import java.io.File
 
 interface Engine {
     suspend fun init(): EngineStatus
-    /** Single extraction; the result is cached so a following [download] of the same URL doesn't re-extract. */
+    /**
+     * Single extraction; the result is cached so a following [download] of the same URL doesn't re-extract.
+     * Cancellable (e.g. by a timeout): returns at once, though the extraction may keep running in the background.
+     */
     suspend fun probe(url: String): MediaInfo
     fun download(req: DownloadRequest): Flow<DownloadEvent>
     /** Stops a running download; [keepFiles] leaves partial files so a later run resumes them. */

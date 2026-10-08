@@ -83,6 +83,7 @@
     <string name="status_retrying">Retrying…</string>
     <string name="status_retrying_forbidden">The site refused the download. Trying again in 30 seconds…</string>
     <string name="action_more_qualities">More qualities ›</string>
+    <string name="qualities_timed_out">This link is taking too long to look up. Check your connection and retry.</string>
     <string name="qualities_failed">Couldn\'t load the qualities for this link.</string>
     <string name="qualities_video">VIDEO</string>
     <string name="qualities_video_only">VIDEO ONLY (no sound)</string>

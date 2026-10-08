@@ -22,7 +22,10 @@ import io.github.sriram_pr.snaggle.engine.Mode
 import io.github.sriram_pr.snaggle.engine.UpdateResult
 import io.github.sriram_pr.snaggle.engine.YtDlpInstall
 import io.github.sriram_pr.snaggle.engine.YtDlpVersion
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.channels.trySendBlocking
@@ -151,9 +154,11 @@ class ChaquopyEngine(context: Context) : Engine {
         }
     }
 
-    override suspend fun probe(url: String): MediaInfo = withContext(Dispatchers.IO) {
-        job { probeNow(url) }
-    }
+    // A Python call can't be interrupted, so probes run here and a cancelled caller stops waiting at once;
+    // the abandoned call finishes in the background (still counted as a job).
+    private val probeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    override suspend fun probe(url: String): MediaInfo = probeScope.async { job { probeNow(url) } }.await()
 
     private fun probeNow(url: String): MediaInfo {
         try {

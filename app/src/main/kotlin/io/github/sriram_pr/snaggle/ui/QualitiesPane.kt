@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -45,15 +46,23 @@ import io.github.sriram_pr.snaggle.engine.Qualities
 import io.github.sriram_pr.snaggle.engine.Quality
 import io.github.sriram_pr.snaggle.engine.QualityOptions
 import io.github.sriram_pr.snaggle.snaggle
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import java.util.Locale
+
+// A probe once hung for over 5 minutes; a normal one takes a few seconds.
+private const val PROBE_TIMEOUT_MS = 30_000L
 
 /** "More qualities": every resolution the link actually has, plus video-only and audio choices. */
 @Composable
 fun QualitiesPane(url: String, onDownload: (Mode, JobActions.Choice) -> Unit) {
     val context = LocalContext.current
-    val loaded by produceState<Result<Pair<MediaInfo, QualityOptions>>?>(null, url) {
+    var attempt by remember { mutableIntStateOf(0) }
+    val loaded by produceState<Result<Pair<MediaInfo, QualityOptions>>?>(null, url, attempt) {
+        value = null
         value = runCatching {
-            val info = context.snaggle.readyEngine().probe(url)
+            val engine = context.snaggle.readyEngine()
+            val info = withTimeout(PROBE_TIMEOUT_MS) { engine.probe(url) }
             info to Qualities.from(info.formats, hasHardwareAv1())
         }
     }
@@ -64,8 +73,15 @@ fun QualitiesPane(url: String, onDownload: (Mode, JobActions.Choice) -> Unit) {
         else -> result.fold(
             onSuccess = { (info, options) -> Choices(info, options, onDownload) },
             onFailure = { e ->
-                val message = (e as? EngineException)?.error?.userMessage(context) ?: stringResource(R.string.qualities_failed)
-                Text(message, Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.error)
+                val message = when (e) {
+                    is TimeoutCancellationException -> stringResource(R.string.qualities_timed_out)
+                    is EngineException -> e.error.userMessage(context)
+                    else -> stringResource(R.string.qualities_failed)
+                }
+                Column(Modifier.fillMaxWidth().padding(vertical = 16.dp)) {
+                    Text(message, color = MaterialTheme.colorScheme.error)
+                    TextButton({ attempt++ }, Modifier.align(Alignment.CenterHorizontally)) { Text(stringResource(R.string.action_retry)) }
+                }
             },
         )
     }
