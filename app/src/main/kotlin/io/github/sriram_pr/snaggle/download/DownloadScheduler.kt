@@ -29,6 +29,8 @@ object DownloadScheduler {
             val network = NetworkRequest.Builder()
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                // The builder asks for NOT_VPN by default, which left downloads waiting forever behind a VPN.
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
                 .build()
             val info = JobInfo.Builder(jobId.hashCode(), ComponentName(context, UidtJobService::class.java))
                 .setUserInitiated(true)
