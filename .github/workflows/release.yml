@@ -1,0 +1,100 @@
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  native:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/native.yml
+    with:
+      # A release never reuses cached binaries: they're rebuilt from the pinned sources.
+      use-cache: false
+
+  release:
+    needs: native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: release
+    permissions:
+      contents: write      # create the draft release
+      id-token: write      # attestations (Sigstore OIDC)
+      attestations: write
+    env:
+      GRADLE_USER_HOME: ${{ github.workspace }}/.tools/gradle-home
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      # No Gradle cache in releases: a fresh build that a poisoned cache can't touch.
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-disabled: true
+
+      - name: Install SDK components
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "platforms;android-37.0" "build-tools;36.1.0" > /dev/null
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-out
+          path: native/out
+
+      - name: Unit tests
+        run: ./gw :engine:test
+
+      - name: Build signed APKs
+        env:
+          KEYSTORE_B64: ${{ secrets.SNAGGLE_KEYSTORE_B64 }}
+          SNAGGLE_KEYSTORE_PASSWORD: ${{ secrets.SNAGGLE_KEYSTORE_PASSWORD }}
+          SNAGGLE_KEY_ALIAS: ${{ secrets.SNAGGLE_KEY_ALIAS }}
+          SNAGGLE_KEY_PASSWORD: ${{ secrets.SNAGGLE_KEY_PASSWORD }}
+        run: |
+          export SNAGGLE_KEYSTORE="$RUNNER_TEMP/release.p12"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$SNAGGLE_KEYSTORE"
+          trap 'rm -f "$SNAGGLE_KEYSTORE"' EXIT
+          ./gw assembleArm64Release assembleX64Release -Psnaggle.version="${GITHUB_REF_NAME#v}"
+
+      - name: Verify, rename, checksum
+        run: |
+          set -euo pipefail
+          v="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk "dist/snaggle-$v-arm64-v8a.apk"
+          cp app/build/outputs/apk/x64/release/app-x64-release.apk "dist/snaggle-$v-x86_64.apk"
+          for f in dist/*.apk; do
+            "$ANDROID_HOME/build-tools/36.1.0/apksigner" verify --print-certs "$f" | tee -a "$RUNNER_TEMP/certs.txt"
+            "$ANDROID_HOME/build-tools/36.1.0/aapt2" dump badging "$f" | head -1
+          done
+          # Both APKs must carry the same certificate.
+          test "$(grep -c 'SHA-256 digest' "$RUNNER_TEMP/certs.txt")" -eq 2
+          test "$(grep 'SHA-256 digest' "$RUNNER_TEMP/certs.txt" | sort -u | wc -l)" -eq 1
+          (cd dist && sha256sum ./*.apk > SHA256SUMS && cat SHA256SUMS)
+
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+
+      - name: Draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --verify-tag \
+            --title "Snaggle ${GITHUB_REF_NAME#v}" --generate-notes
