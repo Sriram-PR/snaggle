@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      androidx:
+        patterns: ['androidx.*']
+    ignore:
+      # Chaquopy 17.0.0 supports AGP ≤ 9.2; bump AGP only together with Chaquopy.
+      - dependency-name: com.android.application
+        update-types: [version-update:semver-minor, version-update:semver-major]
+      - dependency-name: com.android.library
+        update-types: [version-update:semver-minor, version-update:semver-major]
