@@ -77,6 +77,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -98,6 +99,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun HistoryScreen(onSettings: () -> Unit) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val scope = rememberCoroutineScope()
     val jobs by remember { context.snaggle.db.jobs().observeAll() }.collectAsStateWithLifecycle(emptyList())
     val wifiOnly by remember { context.snaggle.settings.settings.map { it.wifiOnly } }.collectAsStateWithLifecycle(false)
@@ -130,7 +132,7 @@ fun HistoryScreen(onSettings: () -> Unit) {
         snackbar.currentSnackbarData?.dismiss() // the previous one is committed now
         undoable[job.id] = job
         scope.launch {
-            val result = snackbar.showSnackbar(context.getString(R.string.snackbar_deleted), context.getString(R.string.action_undo), duration = SnackbarDuration.Short)
+            val result = snackbar.showSnackbar(resources.getString(R.string.snackbar_deleted), resources.getString(R.string.action_undo), duration = SnackbarDuration.Short)
             val pending = undoable.remove(job.id) ?: return@launch
             if (result != SnackbarResult.ActionPerformed) handle(JobActions.delete(context, pending))
         }

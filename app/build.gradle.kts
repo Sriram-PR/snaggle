@@ -4,6 +4,16 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Release CI passes -Psnaggle.version=MAJOR.MINOR.PATCH from the tag; local builds are 0.0.0-dev.
+val appVersion: String? = providers.gradleProperty("snaggle.version").orNull
+val appVersionCode: Int = appVersion?.let { v ->
+    val (major, minor, patch) = requireNotNull(Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(v)) {
+        "snaggle.version must be MAJOR.MINOR.PATCH, got '$v'"
+    }.destructured.toList().map(String::toInt)
+    require(minor < 1000 && patch < 1000) { "snaggle.version minor/patch must be < 1000, got '$v'" }
+    major * 1_000_000 + minor * 1_000 + patch
+} ?: 1
+
 android {
     namespace = "io.github.sriram_pr.snaggle"
     compileSdk = 37
@@ -13,8 +23,8 @@ android {
         applicationId = "io.github.sriram_pr.snaggle"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.0.1-spike"
+        versionCode = appVersionCode
+        versionName = appVersion ?: "0.0.0-dev"
     }
 
     flavorDimensions += "abi"
