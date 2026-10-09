@@ -91,6 +91,8 @@
     <string name="settings_in_use">In use</string>
     <string name="settings_held">Held</string>
     <string name="settings_use_version">Use this version</string>
+    <string name="settings_licenses">Open-source licences</string>
+    <string name="action_close">Close</string>
     <string name="result_updated">Updated to %1$s</string>
     <string name="result_up_to_date">Up to date (%1$s)</string>
     <string name="result_failed">Couldn\'t update: %1$s</string>

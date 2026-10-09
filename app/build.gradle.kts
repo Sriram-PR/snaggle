@@ -59,3 +59,29 @@ dependencies {
     implementation(libs.work.runtime)
     implementation(libs.datastore)
 }
+
+// THIRD_PARTY_NOTICES.md lives at the repo root; the APK carries a copy (MIT/Apache/LGPL require it).
+abstract class CopyNotices : DefaultTask() {
+    @get:InputFile @get:PathSensitive(PathSensitivity.NONE) abstract val source: RegularFileProperty
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+    @get:javax.inject.Inject abstract val fs: FileSystemOperations
+
+    @TaskAction
+    fun copy() {
+        fs.sync {
+            from(source)
+            into(outputDir.get().asFile.resolve("licenses"))
+        }
+    }
+}
+
+val copyNotices = tasks.register<CopyNotices>("copyNotices") {
+    source = rootProject.layout.projectDirectory.file("THIRD_PARTY_NOTICES.md")
+    outputDir = layout.buildDirectory.dir("generated/notices-assets")
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyNotices, CopyNotices::outputDir)
+    }
+}

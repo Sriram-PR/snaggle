@@ -16,6 +16,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -194,6 +195,20 @@ private fun SettingsScreen(onBack: () -> Unit) {
                         }
                     }
                 }
+            }
+
+            var showLicenses by remember { mutableStateOf(false) }
+            TextButton({ showLicenses = true }, Modifier.padding(horizontal = 8.dp, vertical = 12.dp)) {
+                Text(stringResource(R.string.settings_licenses))
+            }
+            if (showLicenses) {
+                val notices = remember { app.assets.open("licenses/THIRD_PARTY_NOTICES.md").bufferedReader().use { it.readText() } }
+                AlertDialog(
+                    onDismissRequest = { showLicenses = false },
+                    confirmButton = { TextButton({ showLicenses = false }) { Text(stringResource(R.string.action_close)) } },
+                    title = { Text(stringResource(R.string.settings_licenses)) },
+                    text = { Text(notices, Modifier.verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) },
+                )
             }
         }
     }
