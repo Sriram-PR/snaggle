@@ -21,6 +21,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -239,6 +240,20 @@ class DownloadRunner(private val app: SnaggleApp) {
 
         /** Scratch directory for one job; kept after failures so a retry can resume `.part` files. */
         fun workDir(app: SnaggleApp, jobId: String) = File(app.cacheDir, "downloads/$jobId")
+
+        private const val STALE_PARTIALS_MS = 7 * 24 * 60 * 60 * 1000L
+
+        /**
+         * Drops partial files nobody has touched for a while (failed jobs never retried, long waits for
+         * Wi-Fi). History entries stay; a retry starts over. Running jobs are left alone.
+         */
+        suspend fun sweepStalePartials(app: SnaggleApp) = withContext(Dispatchers.IO) {
+            val cutoff = System.currentTimeMillis() - STALE_PARTIALS_MS
+            for (dir in File(app.cacheDir, "downloads").listFiles().orEmpty()) {
+                if (app.db.jobs().get(dir.name)?.status == JobStatus.RUNNING) continue
+                if (dir.walk().maxOf { it.lastModified() } < cutoff) dir.deleteRecursively()
+            }
+        }
 
         /** Returns true if the job was running in this process and is now being cancelled. */
         fun cancel(jobId: String): Boolean {

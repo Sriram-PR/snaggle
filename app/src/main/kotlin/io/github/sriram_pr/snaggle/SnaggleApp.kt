@@ -4,12 +4,14 @@ import android.app.Application
 import android.content.Context
 import io.github.sriram_pr.snaggle.data.SettingsStore
 import io.github.sriram_pr.snaggle.data.SnaggleDb
+import io.github.sriram_pr.snaggle.download.DownloadRunner
 import io.github.sriram_pr.snaggle.download.Notifications
 import io.github.sriram_pr.snaggle.engine.EngineStatus
 import io.github.sriram_pr.snaggle.engine.chaquopy.ChaquopyEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -38,6 +40,7 @@ class SnaggleApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        appScope.launch { DownloadRunner.sweepStalePartials(this@SnaggleApp) }
     }
 }
 
