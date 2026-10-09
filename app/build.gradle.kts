@@ -33,8 +33,21 @@ android {
         create("x64") { dimension = "abi"; ndk { abiFilters += "x86_64" } }
     }
 
+    // CI's release job sets these; without them the release build stays unsigned.
+    val keystore = providers.environmentVariable("SNAGGLE_KEYSTORE").orNull
+    if (keystore != null) {
+        signingConfigs.create("release") {
+            storeFile = file(keystore)
+            storePassword = providers.environmentVariable("SNAGGLE_KEYSTORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("SNAGGLE_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("SNAGGLE_KEY_PASSWORD").get()
+            enableV3Signing = true // allows key rotation later
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
