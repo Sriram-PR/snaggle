@@ -16,7 +16,7 @@
     <string name="share_quality_compatible">Best compatible</string>
     <string name="share_quality_720">Data saver (720p)</string>
     <string name="share_no_link">No link found in what was shared.</string>
-    <string name="error_bot_check">YouTube is asking for verification. Try again later.</string>
+    <string name="error_bot_check">YouTube is asking for verification. If you\'re using a VPN, turn it off and retry; otherwise try again later.</string>
     <string name="error_login_required">This needs a login (private, members-only, or login-walled). Login support is coming.</string>
     <string name="error_unavailable">The video is unavailable: removed, region-locked, or blocked.</string>
     <string name="error_format_unavailable">That quality isn\'t available for this video. Try Data saver or Audio.</string>
