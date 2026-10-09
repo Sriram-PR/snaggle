@@ -9,12 +9,28 @@ import android.net.Uri
 import android.os.Build
 import android.util.Size
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.Role
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -87,22 +103,47 @@ fun HistoryScreen(onSettings: () -> Unit) {
     val wifiOnly by remember { context.snaggle.settings.settings.map { it.wifiOnly } }.collectAsStateWithLifecycle(false)
     var linkText by rememberSaveable { mutableStateOf("") }
     var sheetUrl by remember { mutableStateOf<String?>(null) }
-    var pendingDeleteId by remember { mutableStateOf<String?>(null) }
+    var consentIds by remember { mutableStateOf(emptyList<String>()) }
+    var selected by remember { mutableStateOf(emptySet<String>()) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmSelected by remember { mutableStateOf(false) }
+    var confirmClear by remember { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    // Gone from the list but not yet from disk while "Undo" is offered.
+    val undoable = remember { mutableStateMapOf<String, JobEntity>() }
+    val visible = jobs.filter { it.id !in undoable }
+    val selectable = visible.filter { it.status in SELECTABLE }
 
     val deleteConsent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        val id = pendingDeleteId
-        pendingDeleteId = null
-        if (result.resultCode == Activity.RESULT_OK && id != null) scope.launch { JobActions.forget(context, id) }
+        val ids = consentIds
+        consentIds = emptyList()
+        if (result.resultCode == Activity.RESULT_OK) scope.launch { ids.forEach { JobActions.forget(context, it) } }
     }
-    fun delete(job: JobEntity) = scope.launch {
-        when (val r = JobActions.delete(context, job)) {
-            JobActions.DeleteResult.Deleted -> Unit
-            is JobActions.DeleteResult.NeedsConsent -> {
-                pendingDeleteId = job.id
-                deleteConsent.launch(IntentSenderRequest.Builder(r.request).build())
-            }
+    fun handle(result: JobActions.DeleteResult) {
+        if (result is JobActions.DeleteResult.NeedsConsent) {
+            consentIds = result.jobIds
+            deleteConsent.launch(IntentSenderRequest.Builder(result.request).build())
         }
     }
+    fun deleteAll(list: List<JobEntity>, deleteFiles: Boolean) = scope.launch { handle(JobActions.deleteAll(context, list, deleteFiles)) }
+    fun deleteWithUndo(job: JobEntity) {
+        snackbar.currentSnackbarData?.dismiss() // the previous one is committed now
+        undoable[job.id] = job
+        scope.launch {
+            val result = snackbar.showSnackbar(context.getString(R.string.snackbar_deleted), context.getString(R.string.action_undo), duration = SnackbarDuration.Short)
+            val pending = undoable.remove(job.id) ?: return@launch
+            if (result != SnackbarResult.ActionPerformed) handle(JobActions.delete(context, pending))
+        }
+    }
+    // Leaving the screen while "Undo" is showing commits the delete (a consent dialog can't be shown then).
+    DisposableEffect(Unit) {
+        onDispose {
+            val left = undoable.values.toList()
+            undoable.clear()
+            if (left.isNotEmpty()) context.snaggle.appScope.launch { JobActions.deleteAll(context.snaggle, left, deleteFiles = true) }
+        }
+    }
+    BackHandler(enabled = selected.isNotEmpty()) { selected = emptySet() }
     fun submit() {
         val url = Links.extract(linkText)
         if (url == null) Toast.makeText(context, R.string.share_no_link, Toast.LENGTH_SHORT).show() else sheetUrl = url
@@ -110,11 +151,35 @@ fun HistoryScreen(onSettings: () -> Unit) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.app_name)) },
-                actions = { IconButton(onSettings) { Icon(Icons.Default.Settings, stringResource(R.string.settings)) } },
-            )
+            if (selected.isNotEmpty()) {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.history_selected, selected.size)) },
+                    navigationIcon = { IconButton({ selected = emptySet() }) { Icon(Icons.Default.Close, stringResource(R.string.action_cancel)) } },
+                    actions = {
+                        TextButton({ selected = selectable.map { it.id }.toSet() }) { Text(stringResource(R.string.action_select_all)) }
+                        IconButton({ confirmSelected = true }) { Icon(Icons.Default.Delete, stringResource(R.string.action_delete)) }
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.app_name)) },
+                    actions = {
+                        IconButton(onSettings) { Icon(Icons.Default.Settings, stringResource(R.string.settings)) }
+                        Box {
+                            IconButton({ menuOpen = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.action_more)) }
+                            DropdownMenu(menuOpen, { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    { Text(stringResource(R.string.action_clear_history)) },
+                                    { menuOpen = false; confirmClear = true },
+                                    enabled = selectable.isNotEmpty(),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
         },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         LazyColumn(contentPadding = padding) {
             item {
@@ -138,7 +203,7 @@ fun HistoryScreen(onSettings: () -> Unit) {
                 }
             }
             item { EngineUpdatesPrompt(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
-            if (jobs.isEmpty()) {
+            if (visible.isEmpty()) {
                 item {
                     Text(
                         stringResource(R.string.history_empty),
@@ -148,19 +213,69 @@ fun HistoryScreen(onSettings: () -> Unit) {
                     )
                 }
             }
-            items(jobs, key = { it.id }) { job ->
+            items(visible, key = { it.id }) { job ->
+                fun toggle() {
+                    selected = if (job.id in selected) selected - job.id else selected + job.id
+                }
                 JobRow(
                     job,
                     wifiOnly,
+                    selection = if (job.status in SELECTABLE) (job.id in selected) else null,
+                    selectionMode = selected.isNotEmpty(),
+                    onToggle = ::toggle,
                     onOpen = { if (!JobActions.open(context, job)) Toast.makeText(context, R.string.open_failed, Toast.LENGTH_SHORT).show() },
                     onShare = { JobActions.share(context, job) },
                     onCancel = { scope.launch { JobActions.cancel(context, job.id) } },
                     onRetry = { scope.launch { JobActions.retry(context, job) } },
                     onTryLatestEngine = { scope.launch { JobActions.tryLatestEngine(context, job.id) } },
-                    onDelete = { delete(job) },
+                    onDelete = { deleteWithUndo(job) },
                 )
             }
         }
+    }
+    if (confirmSelected) {
+        val chosen = visible.filter { it.id in selected }
+        AlertDialog(
+            onDismissRequest = { confirmSelected = false },
+            title = { Text(pluralStringResource(R.plurals.delete_selected_title, chosen.size, chosen.size)) },
+            text = { Text(stringResource(R.string.delete_selected_body)) },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton({ deleteAll(chosen, true); selected = emptySet(); confirmSelected = false }) {
+                        Text(stringResource(R.string.action_delete_files), color = MaterialTheme.colorScheme.error)
+                    }
+                    TextButton({ deleteAll(chosen, false); selected = emptySet(); confirmSelected = false }) {
+                        Text(stringResource(R.string.action_remove_from_history))
+                    }
+                    TextButton({ confirmSelected = false }) { Text(stringResource(R.string.action_cancel)) }
+                }
+            },
+        )
+    }
+    if (confirmClear) {
+        var alsoFiles by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text(stringResource(R.string.clear_history_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.clear_history_body))
+                    Row(
+                        Modifier.fillMaxWidth().toggleable(alsoFiles, role = Role.Checkbox) { alsoFiles = it },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(alsoFiles, null)
+                        Text(stringResource(R.string.clear_history_files), Modifier.padding(start = 8.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton({ deleteAll(selectable, alsoFiles); confirmClear = false }) {
+                    Text(stringResource(R.string.action_clear), color = if (alsoFiles) MaterialTheme.colorScheme.error else Color.Unspecified)
+                }
+            },
+            dismissButton = { TextButton({ confirmClear = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
     }
     sheetUrl?.let { url ->
         DownloadSheet(url) {
@@ -175,6 +290,10 @@ fun HistoryScreen(onSettings: () -> Unit) {
 private fun JobRow(
     job: JobEntity,
     wifiOnly: Boolean,
+    /** null: this row can't be selected (running or waiting). */
+    selection: Boolean?,
+    selectionMode: Boolean,
+    onToggle: () -> Unit,
     onOpen: () -> Unit,
     onShare: () -> Unit,
     onCancel: () -> Unit,
@@ -191,8 +310,15 @@ private fun JobRow(
         }
     }
     val missing = thumb?.second == false
+    val openable = job.status == JobStatus.DONE && !missing
     Row(
-        Modifier.fillMaxWidth().clickable(enabled = job.status == JobStatus.DONE && !missing, onClick = onOpen)
+        Modifier.fillMaxWidth()
+            .background(if (selection == true) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
+            .combinedClickable(
+                enabled = if (selectionMode) selection != null else openable || selection != null,
+                onLongClick = if (selection != null && !selectionMode) onToggle else null,
+                onClick = { if (selectionMode) onToggle() else if (openable) onOpen() },
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -233,7 +359,8 @@ private fun JobRow(
                 }
             }
         }
-        when (job.status) {
+        if (selectionMode && selection != null) Checkbox(selection, null)
+        else when (job.status) {
             JobStatus.QUEUED, JobStatus.RUNNING ->
                 IconButton(onCancel) { Icon(Icons.Default.Close, stringResource(R.string.action_cancel)) }
             JobStatus.DONE -> {
@@ -247,6 +374,8 @@ private fun JobRow(
         }
     }
 }
+
+private val SELECTABLE = setOf(JobStatus.DONE, JobStatus.FAILED, JobStatus.CANCELLED)
 
 private fun copyReport(context: Context, report: String) {
     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Snaggle debug report", report))

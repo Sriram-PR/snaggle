@@ -81,31 +81,44 @@ object JobActions {
 
     sealed interface DeleteResult {
         data object Deleted : DeleteResult
-        /** Android needs the user's consent (we no longer own the file, e.g. after a reinstall). */
-        data class NeedsConsent(val request: PendingIntent) : DeleteResult
+        /** Android needs the user's consent for [jobIds]' files (we no longer own them, e.g. after a reinstall). */
+        data class NeedsConsent(val request: PendingIntent, val jobIds: List<String>) : DeleteResult
     }
 
-    suspend fun delete(context: Context, job: JobEntity): DeleteResult {
-        if (job.status == JobStatus.RUNNING || job.status == JobStatus.QUEUED) cancel(context, job.id)
-        val uri = job.outputUri?.let(Uri::parse)
-        // A file already removed outside the app makes MediaStore throw (SecurityException on Android 16,
-        // then "Invalid Uri" for a consent request), so only touch files that still exist.
-        if (uri != null && withContext(Dispatchers.IO) { fileState(context, job) } != FileState.MISSING) {
-            try {
-                withContext(Dispatchers.IO) { context.contentResolver.delete(uri, null, null) }
-            } catch (e: SecurityException) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    try {
-                        return DeleteResult.NeedsConsent(MediaStore.createDeleteRequest(context.contentResolver, listOf(uri)))
-                    } catch (e: IllegalArgumentException) {
-                        // Gone between the check and the request; nothing left to delete.
+    suspend fun delete(context: Context, job: JobEntity): DeleteResult = deleteAll(context, listOf(job), deleteFiles = true)
+
+    /**
+     * Removes [jobs] from history and, with [deleteFiles], their files too. Files we no longer own are
+     * collected into one consent request; their entries stay until the user agrees.
+     */
+    suspend fun deleteAll(context: Context, jobs: List<JobEntity>, deleteFiles: Boolean): DeleteResult {
+        val needConsent = mutableListOf<Pair<String, Uri>>()
+        for (job in jobs) {
+            if (job.status == JobStatus.RUNNING || job.status == JobStatus.QUEUED) cancel(context, job.id)
+            val uri = job.outputUri?.let(Uri::parse)
+            // A file already removed outside the app makes MediaStore throw (SecurityException on Android 16,
+            // then "Invalid Uri" for a consent request), so only touch files that still exist.
+            if (deleteFiles && uri != null && withContext(Dispatchers.IO) { fileState(context, job) } != FileState.MISSING) {
+                try {
+                    withContext(Dispatchers.IO) { context.contentResolver.delete(uri, null, null) }
+                } catch (e: SecurityException) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        needConsent += job.id to uri
+                        continue
                     }
+                    // Android 10 has no consent dialog for this; the file stays in the gallery.
                 }
-                // Android 10 has no consent dialog for this; the file stays in the gallery.
             }
+            forget(context, job.id)
         }
-        forget(context, job.id)
-        return DeleteResult.Deleted
+        if (needConsent.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return DeleteResult.Deleted
+        return try {
+            DeleteResult.NeedsConsent(MediaStore.createDeleteRequest(context.contentResolver, needConsent.map { it.second }), needConsent.map { it.first })
+        } catch (e: IllegalArgumentException) {
+            // Gone between the check and the request; nothing left to delete.
+            needConsent.forEach { forget(context, it.first) }
+            DeleteResult.Deleted
+        }
     }
 
     suspend fun forget(context: Context, jobId: String) {

@@ -32,6 +32,23 @@
     <string name="already_downloaded_body">You saved this before. Open it, or download a fresh copy?</string>
     <string name="action_download_again">Download again</string>
     <string name="action_retry">Retry</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_more">More options</string>
+    <string name="action_select_all">Select all</string>
+    <string name="action_clear">Clear</string>
+    <string name="action_clear_history">Clear history</string>
+    <string name="action_remove_from_history">Remove from history</string>
+    <string name="action_delete_files">Delete files too</string>
+    <string name="snackbar_deleted">Download deleted</string>
+    <string name="history_selected">%1$d selected</string>
+    <plurals name="delete_selected_title">
+        <item quantity="one">Delete %1$d download?</item>
+        <item quantity="other">Delete %1$d downloads?</item>
+    </plurals>
+    <string name="delete_selected_body">Remove them from this list only, or also delete the files from your gallery.</string>
+    <string name="clear_history_title">Clear history?</string>
+    <string name="clear_history_body">Removes finished, failed and cancelled downloads from this list. Downloads in progress stay.</string>
+    <string name="clear_history_files">Also delete the downloaded files</string>
     <string name="action_delete">Delete</string>
     <string name="action_paste">Paste</string>
     <string name="action_download">Download</string>
