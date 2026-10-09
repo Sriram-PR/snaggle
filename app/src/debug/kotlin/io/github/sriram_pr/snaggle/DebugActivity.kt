@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.sriram_pr.snaggle.download.userMessage
 import io.github.sriram_pr.snaggle.engine.Channel
 import io.github.sriram_pr.snaggle.engine.DownloadEvent
 import io.github.sriram_pr.snaggle.engine.DownloadRequest
@@ -210,6 +211,10 @@ private fun SpikeScreen(
             "play" -> timed("play") {
                 val uri = Spike.lastSaved ?: error("nothing saved")
                 context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, context.contentResolver.getType(uri)).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            }
+            "botmsg" -> timed("botmsg") {
+                // The bot-check message as it would be shown right now (depends on whether a VPN is active).
+                log(io.github.sriram_pr.snaggle.engine.EngineError.BotCheck.userMessage(context))
             }
             "versions" -> timed("versions") { log("${engine().versions()} installed=${engine().installedYtDlp()}") }
         }
