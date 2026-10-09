@@ -323,7 +323,7 @@ def _hook(fn):
 
 
 def _tags_pp(ydl):
-    """yt-dlp's FFmpegMetadata (title, artist, date, …; stream copy), but a failure only skips the tags."""
+    """yt-dlp's FFmpegMetadata (tags and chapters; stream copy), but a failure only skips them."""
     from yt_dlp.postprocessor import FFmpegMetadataPP
     from yt_dlp.utils import prepend_extension
 
@@ -339,8 +339,7 @@ def _tags_pp(ydl):
                 self.report_warning(f'Could not add tags: {e}')
                 return [], info
 
-    # Chapters need ffmpeg's ffmetadata demuxer, which our build leaves out.
-    return SnaggleTagsPP(ydl, add_chapters=False, add_infojson=False)
+    return SnaggleTagsPP(ydl, add_infojson=False)
 
 
 def _delete_partials(paths):
