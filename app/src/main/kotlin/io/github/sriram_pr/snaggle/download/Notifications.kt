@@ -63,7 +63,7 @@ object Notifications {
         post(
             context, resultId(jobId),
             NotificationCompat.Builder(context, CHANNEL_RESULTS)
-                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setSmallIcon(R.drawable.ic_stat_snaggle)
                 .setContentTitle(title)
                 .setContentText(context.getString(R.string.status_saved))
                 .setContentIntent(openPi)
@@ -76,7 +76,7 @@ object Notifications {
 
     fun showFailed(context: Context, jobId: String, title: String, message: String, offerLatestEngine: Boolean) {
         val builder = NotificationCompat.Builder(context, CHANNEL_RESULTS)
-            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setSmallIcon(R.drawable.ic_stat_snaggle)
             .setContentTitle(context.getString(R.string.status_failed))
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$message"))
@@ -93,7 +93,7 @@ object Notifications {
         post(
             context, ENGINE_UPDATED_ID,
             NotificationCompat.Builder(context, CHANNEL_ENGINE)
-                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                .setSmallIcon(R.drawable.ic_stat_snaggle)
                 .setContentTitle(context.getString(R.string.engine_updated))
                 .setContentText(context.getString(R.string.engine_updated_body, version))
                 .setAutoCancel(true)
