@@ -1,0 +1,58 @@
+name: native
+
+on:
+  workflow_call:
+    inputs:
+      use-cache:
+        description: Reuse native/out from a previous run with the same build scripts
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: cache
+        if: inputs.use-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: native/out
+          key: native-${{ hashFiles('native/*/build.sh') }}
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+
+      - name: Install NDK
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" > /dev/null
+
+      - name: Build ffmpeg, QuickJS, cffi
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          native/ffmpeg/build.sh
+          native/quickjs/build.sh
+          PYTHON=python3.13 native/cffi/build.sh
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-out
+          path: native/out
+          if-no-files-found: error
+          retention-days: 7
