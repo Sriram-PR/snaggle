@@ -273,6 +273,8 @@ def download(job_id, url, fmt, merge_format, out_dir, sink, audio_only=False):
     try:
         with yt_dlp.YoutubeDL(_params(sink, extra)) as ydl:
             ydl.add_post_processor(_hook(check_space), when='before_dl')
+            # After the merge/remux/audio postprocessors from params.
+            ydl.add_post_processor(_tags_pp(ydl), when='post_process')
             with _lock:
                 probed_at, cached = _info_cache.pop(url, (0, None))
             if time.monotonic() - probed_at > _INFO_CACHE_SECONDS:
@@ -318,6 +320,27 @@ def _hook(fn):
             return [], info
 
     return SnaggleHookPP()
+
+
+def _tags_pp(ydl):
+    """yt-dlp's FFmpegMetadata (title, artist, date, …; stream copy), but a failure only skips the tags."""
+    from yt_dlp.postprocessor import FFmpegMetadataPP
+    from yt_dlp.utils import prepend_extension
+
+    class SnaggleTagsPP(FFmpegMetadataPP):
+        def run(self, info):
+            try:
+                return super().run(info)
+            except Exception as e:
+                try:
+                    os.remove(prepend_extension(info['filepath'], 'temp'))
+                except OSError:
+                    pass
+                self.report_warning(f'Could not add tags: {e}')
+                return [], info
+
+    # Chapters need ffmpeg's ffmetadata demuxer, which our build leaves out.
+    return SnaggleTagsPP(ydl, add_chapters=False, add_infojson=False)
 
 
 def _delete_partials(paths):
