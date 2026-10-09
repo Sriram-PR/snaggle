@@ -51,9 +51,13 @@ object EngineUpdates {
     }
 }
 
-/** Failures that usually mean the site changed and a newer yt-dlp might already handle it. */
+/**
+ * Failures that usually mean the site changed and a newer yt-dlp might already handle it.
+ * Not BotCheck: that's YouTube's verdict on the IP/session, relayed verbatim by yt-dlp.
+ */
 fun EngineError.isSiteChange(): Boolean = when (this) {
-    EngineError.BotCheck, EngineError.Unavailable, EngineError.FormatUnavailable,
+    EngineError.Unavailable, EngineError.FormatUnavailable,
     EngineError.Forbidden, EngineError.JsRuntimeMissing, is EngineError.Unknown -> true
-    EngineError.LoginRequired, EngineError.RateLimited, EngineError.Network, EngineError.Unsupported, is EngineError.NoSpace -> false
+    EngineError.BotCheck, EngineError.LoginRequired, EngineError.RateLimited, EngineError.Network,
+    EngineError.Unsupported, is EngineError.NoSpace -> false
 }
