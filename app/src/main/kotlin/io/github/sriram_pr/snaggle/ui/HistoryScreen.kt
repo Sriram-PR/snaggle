@@ -73,6 +73,7 @@ import io.github.sriram_pr.snaggle.data.NightlyState
 import io.github.sriram_pr.snaggle.download.JobActions
 import io.github.sriram_pr.snaggle.engine.Mode
 import io.github.sriram_pr.snaggle.snaggle
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -83,6 +84,7 @@ fun HistoryScreen(onSettings: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val jobs by remember { context.snaggle.db.jobs().observeAll() }.collectAsStateWithLifecycle(emptyList())
+    val wifiOnly by remember { context.snaggle.settings.settings.map { it.wifiOnly } }.collectAsStateWithLifecycle(false)
     var linkText by rememberSaveable { mutableStateOf("") }
     var sheetUrl by remember { mutableStateOf<String?>(null) }
     var pendingDeleteId by remember { mutableStateOf<String?>(null) }
@@ -149,6 +151,7 @@ fun HistoryScreen(onSettings: () -> Unit) {
             items(jobs, key = { it.id }) { job ->
                 JobRow(
                     job,
+                    wifiOnly,
                     onOpen = { if (!JobActions.open(context, job)) Toast.makeText(context, R.string.open_failed, Toast.LENGTH_SHORT).show() },
                     onShare = { JobActions.share(context, job) },
                     onCancel = { scope.launch { JobActions.cancel(context, job.id) } },
@@ -171,6 +174,7 @@ fun HistoryScreen(onSettings: () -> Unit) {
 @Composable
 private fun JobRow(
     job: JobEntity,
+    wifiOnly: Boolean,
     onOpen: () -> Unit,
     onShare: () -> Unit,
     onCancel: () -> Unit,
@@ -213,7 +217,7 @@ private fun JobRow(
                     if (p != null) LinearProgressIndicator({ p }, Modifier.fillMaxWidth()) else LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 else -> Text(
-                    statusText(job, missing),
+                    statusText(job, missing, wifiOnly),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (job.status == JobStatus.FAILED || missing) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -251,9 +255,9 @@ private fun copyReport(context: Context, report: String) {
 }
 
 @Composable
-private fun statusText(job: JobEntity, missing: Boolean): String = when {
+private fun statusText(job: JobEntity, missing: Boolean, wifiOnly: Boolean): String = when {
     missing -> stringResource(R.string.status_file_missing)
-    job.status == JobStatus.QUEUED -> stringResource(R.string.status_queued)
+    job.status == JobStatus.QUEUED -> stringResource(if (wifiOnly) R.string.status_waiting_wifi else R.string.status_queued)
     job.status == JobStatus.CANCELLED -> stringResource(R.string.status_cancelled)
     job.status == JobStatus.FAILED -> job.error ?: stringResource(R.string.status_failed)
     job.qualityLabel != null -> stringResource(

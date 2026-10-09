@@ -15,6 +15,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import io.github.sriram_pr.snaggle.snaggle
 
 /**
  * Android 14+: user-initiated data transfer jobs (Google's recommended API for user-requested
@@ -24,27 +25,46 @@ import androidx.work.workDataOf
 object DownloadScheduler {
     const val EXTRA_JOB_ID = "job_id"
 
-    fun enqueue(context: Context, jobId: String) {
+    /** Schedules (or reschedules, replacing the old constraints) a download. */
+    suspend fun enqueue(context: Context, jobId: String) {
+        val wifiOnly = context.snaggle.settings.current().wifiOnly
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val network = NetworkRequest.Builder()
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                 .addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
                 // The builder asks for NOT_VPN by default, which left downloads waiting forever behind a VPN.
                 .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                // "Wi-Fi only" in Android terms: any unmetered network. Leaving it stops the job; it resumes later.
+                .apply { if (wifiOnly) addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) }
                 .build()
             val info = JobInfo.Builder(jobId.hashCode(), ComponentName(context, UidtJobService::class.java))
                 .setUserInitiated(true)
                 .setRequiredNetwork(network)
+                // Waiting for Wi-Fi can outlast a reboot.
+                .setPersisted(true)
                 .setExtras(PersistableBundle().apply { putString(EXTRA_JOB_ID, jobId) })
                 .build()
             context.getSystemService(JobScheduler::class.java).schedule(info)
         } else {
             val request = OneTimeWorkRequestBuilder<DownloadWorker>()
                 .setInputData(workDataOf(EXTRA_JOB_ID to jobId))
-                .setConstraints(Constraints(requiredNetworkType = NetworkType.CONNECTED))
+                .setConstraints(Constraints(requiredNetworkType = if (wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED))
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(jobId, ExistingWorkPolicy.KEEP, request)
+        }
+    }
+
+    /** Applies a changed Wi-Fi-only setting to downloads that haven't started; running ones carry on. */
+    suspend fun rescheduleWaiting(context: Context) {
+        // Android 10–13: the setting applies to new downloads only.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return
+        val scheduler = context.getSystemService(JobScheduler::class.java)
+        for (job in scheduler.allPendingJobs) {
+            if (job.service.className != UidtJobService::class.java.name) continue
+            // Scheduling the same id again would stop a running job.
+            if (scheduler.getPendingJobReason(job.id) == JobScheduler.PENDING_JOB_REASON_EXECUTING) continue
+            job.extras.getString(EXTRA_JOB_ID)?.let { enqueue(context, it) }
         }
     }
 

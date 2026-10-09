@@ -2,7 +2,9 @@ package io.github.sriram_pr.snaggle.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +39,7 @@ import io.github.sriram_pr.snaggle.R
 import io.github.sriram_pr.snaggle.data.JobEntity
 import io.github.sriram_pr.snaggle.download.JobActions
 import io.github.sriram_pr.snaggle.engine.Mode
+import io.github.sriram_pr.snaggle.snaggle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -60,6 +63,10 @@ fun DownloadSheet(url: String, onDismiss: () -> Unit) {
     }
     fun startNow(mode: Mode, choice: JobActions.Choice?) = scope.launch {
         JobActions.start(context, url, mode, choice)
+        // Otherwise nothing visible happens until the phone reaches Wi-Fi.
+        if (context.snaggle.settings.current().wifiOnly && context.getSystemService(ConnectivityManager::class.java).isActiveNetworkMetered) {
+            Toast.makeText(context, R.string.toast_waiting_wifi, Toast.LENGTH_LONG).show()
+        }
         close()
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {

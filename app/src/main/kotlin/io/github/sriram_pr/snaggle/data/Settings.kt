@@ -26,6 +26,7 @@ data class Settings(
     val notifyEngineUpdates: Boolean = true,
     val nightlyRetry: NightlyRetry = NightlyRetry.ASK,
     val lastEngineCheck: Long = 0,
+    val wifiOnly: Boolean = false,
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -36,6 +37,7 @@ class SettingsStore(private val context: Context) {
         val notify = booleanPreferencesKey("notify_engine_updates")
         val nightly = stringPreferencesKey("nightly_retry")
         val lastCheck = longPreferencesKey("last_engine_check")
+        val wifiOnly = booleanPreferencesKey("wifi_only")
     }
 
     val settings: Flow<Settings> = context.dataStore.data.map { p ->
@@ -45,6 +47,7 @@ class SettingsStore(private val context: Context) {
             notifyEngineUpdates = p[Keys.notify] ?: true,
             nightlyRetry = p[Keys.nightly]?.let { runCatching { NightlyRetry.valueOf(it) }.getOrNull() } ?: NightlyRetry.ASK,
             lastEngineCheck = p[Keys.lastCheck] ?: 0,
+            wifiOnly = p[Keys.wifiOnly] ?: false,
         )
     }
 
@@ -54,4 +57,5 @@ class SettingsStore(private val context: Context) {
     suspend fun setNotifyEngineUpdates(value: Boolean) = context.dataStore.edit { it[Keys.notify] = value }
     suspend fun setNightlyRetry(value: NightlyRetry) = context.dataStore.edit { it[Keys.nightly] = value.name }
     suspend fun setLastEngineCheck(value: Long) = context.dataStore.edit { it[Keys.lastCheck] = value }
+    suspend fun setWifiOnly(value: Boolean) = context.dataStore.edit { it[Keys.wifiOnly] = value }
 }

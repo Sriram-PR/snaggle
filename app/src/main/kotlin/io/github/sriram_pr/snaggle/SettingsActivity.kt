@@ -47,6 +47,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.sriram_pr.snaggle.data.NightlyRetry
 import io.github.sriram_pr.snaggle.data.Settings
 import io.github.sriram_pr.snaggle.data.UpdateFrequency
+import io.github.sriram_pr.snaggle.download.DownloadScheduler
 import io.github.sriram_pr.snaggle.download.EngineUpdates
 import io.github.sriram_pr.snaggle.engine.EngineVersions
 import io.github.sriram_pr.snaggle.engine.YtDlpInstall
@@ -92,6 +93,29 @@ private fun SettingsScreen(onBack: () -> Unit) {
         },
     ) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
+            Header(stringResource(R.string.settings_downloads))
+            Row(
+                Modifier.fillMaxWidth()
+                    .toggleable(settings.wifiOnly, role = Role.Switch) { v ->
+                        scope.launch {
+                            app.settings.setWifiOnly(v)
+                            DownloadScheduler.rescheduleWaiting(app)
+                        }
+                    }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.settings_wifi_only))
+                    Text(
+                        stringResource(R.string.settings_wifi_only_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(settings.wifiOnly, null)
+            }
+
             Header(stringResource(R.string.settings_updates))
             for ((value, label) in listOf(
                 UpdateFrequency.DAILY to R.string.settings_updates_daily,

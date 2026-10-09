@@ -50,6 +50,11 @@
     <string name="engine_updated">Download engine updated</string>
     <string name="engine_updated_body">yt-dlp %1$s</string>
     <string name="settings">Settings</string>
+    <string name="settings_downloads">Downloads</string>
+    <string name="settings_wifi_only">Download on Wi-Fi only</string>
+    <string name="settings_wifi_only_hint">On mobile data, downloads wait until you\'re on Wi-Fi.</string>
+    <string name="status_waiting_wifi">Waiting for Wi-Fi…</string>
+    <string name="toast_waiting_wifi">Will download when you\'re on Wi-Fi</string>
     <string name="settings_updates">Engine updates</string>
     <string name="settings_updates_daily">Daily (recommended)</string>
     <string name="settings_updates_weekly">Weekly</string>
