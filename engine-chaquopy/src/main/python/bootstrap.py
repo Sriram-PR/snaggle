@@ -267,6 +267,7 @@ def download(job_id, url, fmt, merge_format, out_dir, sink, audio_only=False):
         # Audio taken from an MP4 (sites that don't report AAC) ends up as .m4a. AAC is copied, never
         # re-encoded; a .m4a download is left alone; other codecs fail (this ffmpeg has no encoders).
         extra['postprocessors'] = [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'm4a'}]
+        extra['writethumbnail'] = True
 
     with _lock:
         _job_threads[job_id] = threading.get_ident()
@@ -275,6 +276,10 @@ def download(job_id, url, fmt, merge_format, out_dir, sink, audio_only=False):
             ydl.add_post_processor(_hook(check_space), when='before_dl')
             # After the merge/remux/audio postprocessors from params.
             ydl.add_post_processor(_tags_pp(ydl), when='post_process')
+            if audio_only:
+                ydl.add_post_processor(_hook(_keep_embeddable_thumbnails), when='pre_process')
+                # After the tags: their ffmpeg pass drops the cover from .m4a.
+                ydl.add_post_processor(_cover_pp(ydl), when='post_process')
             with _lock:
                 probed_at, cached = _info_cache.pop(url, (0, None))
             if time.monotonic() - probed_at > _INFO_CACHE_SECONDS:
@@ -340,6 +345,41 @@ def _tags_pp(ydl):
                 return [], info
 
     return SnaggleTagsPP(ydl, add_infojson=False)
+
+
+# Extensions don't always say (TikTok's ".image" URLs serve JPEG), so only known misfits are dropped.
+_NOT_EMBEDDABLE = ('webp', 'avif', 'gif', 'heic', 'heif')
+
+
+def _keep_embeddable_thumbnails(info):
+    """mutagen embeds JPEG/PNG as is; anything else needs an ffmpeg image encoder, which our build lacks."""
+    from yt_dlp.utils import determine_ext
+    kept = []
+    for t in info.get('thumbnails') or []:
+        ext = t.get('ext') or determine_ext(t['url'], 'jpg')
+        if ext in _NOT_EMBEDDABLE:
+            continue
+        # Otherwise yt-dlp converts by extension; it sniffs the bytes (and renames real WebP) before embedding.
+        if ext not in ('jpg', 'jpeg', 'png'):
+            t['ext'] = 'jpg'
+        kept.append(t)
+    info['thumbnails'] = kept
+
+
+def _cover_pp(ydl):
+    """yt-dlp's EmbedThumbnail (mutagen for .m4a), but a failure only skips the cover."""
+    from yt_dlp.postprocessor import EmbedThumbnailPP
+
+    class SnaggleCoverPP(EmbedThumbnailPP):
+        def run(self, info):
+            try:
+                return super().run(info)
+            except Exception as e:
+                self.report_warning(f'Could not add cover art: {e}')
+                thumbs = [t['filepath'] for t in info.get('thumbnails') or () if t.get('filepath')]
+                return thumbs, info
+
+    return SnaggleCoverPP(ydl)
 
 
 def _delete_partials(paths):
