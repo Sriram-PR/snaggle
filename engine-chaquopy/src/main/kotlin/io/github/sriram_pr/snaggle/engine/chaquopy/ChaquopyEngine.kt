@@ -197,9 +197,10 @@ class ChaquopyEngine(context: Context) : Engine {
             }
             close()
         }
-        // Collector gone mid-download (e.g. cancelled from the UI): make Python stop at its next hook.
-        // Not after a normal finish: the flag would stick and instantly cancel a retry of the same job.
-        awaitClose { if (!finished.get()) bootstrap?.callAttr("cancel", req.jobId) }
+        // Collector gone mid-download (cancelled from the UI, or the system stopped the job): make Python
+        // stop at its next hook, keeping partial files so a rescheduled run resumes them. Not after a
+        // normal finish: the flag would stick and instantly cancel a retry of the same job.
+        awaitClose { if (!finished.get()) bootstrap?.callAttr("cancel", req.jobId, true) }
     }.buffer(KChannel.UNLIMITED)
 
     override suspend fun cancel(jobId: String, keepFiles: Boolean) {

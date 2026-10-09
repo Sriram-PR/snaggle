@@ -10,6 +10,7 @@ interface Engine {
      * Cancellable (e.g. by a timeout): returns at once, though the extraction may keep running in the background.
      */
     suspend fun probe(url: String): MediaInfo
+    /** Cancelling the collection stops the download and keeps its partial files for a later run. */
     fun download(req: DownloadRequest): Flow<DownloadEvent>
     /** Stops a running download; [keepFiles] leaves partial files so a later run resumes them. */
     suspend fun cancel(jobId: String, keepFiles: Boolean = false)
