@@ -1,4 +1,4 @@
-# <img src="design/icon/icon-64.png" width="40" height="40" align="center" alt=""> Snaggle
+# <img src="design/icon/icon-64.png" width="40" height="40" align="top" alt=""> Snaggle
 
 Save videos and audio from YouTube, TikTok, X and other sites to your Android phone, straight from the share menu. Built on [yt-dlp](https://github.com/yt-dlp/yt-dlp), which Snaggle keeps up to date by itself, without app updates.
 
