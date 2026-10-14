@@ -1,6 +1,6 @@
 [versions]
 agp = "9.2.1"              # Chaquopy 17.0.0 supports AGP 7.3–9.2
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 chaquopy = "17.0.0"
 coroutines = "1.11.0"
 composeBom = "2026.09.00"
