@@ -10,7 +10,7 @@ coreKtx = "1.19.1"
 room = "2.8.5"
 work = "2.12.0"
 datastore = "1.2.1"
-ksp = "2.3.12"
+ksp = "2.3.13"
 
 [libraries]
 coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
